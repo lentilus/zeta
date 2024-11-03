@@ -8,11 +8,6 @@ import (
 // Database schema version
 const SchemaVersion = 1
 
-// DB struct to manage the SQLite connection and schema operations
-type DB struct {
-	Conn *sql.DB
-}
-
 // NewDB initializes a new SQLite database connection, creates tables if they don’t exist,
 // and returns a DB struct with the connection.
 func NewDB(dbPath string) (*DB, error) {

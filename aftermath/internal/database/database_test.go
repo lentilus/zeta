@@ -14,26 +14,27 @@ func TestUpdateZettel(t *testing.T) {
 	_, err := db.Conn.Exec(
 		"INSERT INTO zettels (path, checksum) VALUES (?, ?)",
 		"original_path",
-		"original_checksum",
+		[]byte("original_checksum"),
 	)
 	if err != nil {
 		t.Fatalf("failed to insert initial zettel: %v", err)
 	}
 
 	// Update zettel using the struct
-	zettel := database.Zettel{ID: 1, Path: "new_path", Checksum: "new_checksum"}
+	zettel := database.Zettel{ID: 1, Path: "new_path", Checksum: []byte("new_checksum")}
 	err = db.UpdateZettel(zettel)
 	if err != nil {
 		t.Fatalf("UpdateZettel failed: %v", err)
 	}
 
 	// Verify update
-	var path, checksum string
+	var path string
+	var checksum []byte
 	row := db.Conn.QueryRow("SELECT path, checksum FROM zettels WHERE id = ?", 1)
 	if err := row.Scan(&path, &checksum); err != nil {
 		t.Fatalf("failed to query updated zettel: %v", err)
 	}
-	if path != "new_path" || checksum != "new_checksum" {
+	if path != "new_path" || string(checksum) != "new_checksum" {
 		t.Errorf("expected (new_path, new_checksum), got (%s, %s)", path, checksum)
 	}
 }

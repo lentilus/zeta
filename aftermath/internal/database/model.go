@@ -11,7 +11,7 @@ type DB struct {
 type Zettel struct {
 	ID       int
 	Path     string
-	Checksum string
+	Checksum []byte
 }
 
 // Link represents a relationship between two zettels in the database.

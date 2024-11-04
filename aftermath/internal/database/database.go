@@ -28,21 +28,43 @@ func (db *DB) UpdateZettel(zettel Zettel) error {
 	return nil
 }
 
-// UpdateLink updates the source and target IDs of an existing link in the database.
-func (db *DB) UpdateLink(link Link) error {
+// CreateLink creates a new link between two zettels in the database.
+func (db *DB) CreateLink(sourceID, targetID int) error {
 	tx, err := db.Conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	updateLinkSQL := `
-		UPDATE links
-		SET source_id = ?, target_id = ?
-		WHERE id = ?;
+	createLinkSQL := `
+		INSERT INTO links (source_id, target_id)
+		VALUES (?, ?);
 	`
-	if _, err := tx.Exec(updateLinkSQL, link.SourceID, link.TargetID, link.ID); err != nil {
-		return fmt.Errorf("failed to update link: %w", err)
+	if _, err := tx.Exec(createLinkSQL, sourceID, targetID); err != nil {
+		return fmt.Errorf("failed to create link: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteLinks deletes all outgoing links from a specified zettel in the database.
+func (db *DB) DeleteLinks(sourceID int) error {
+	tx, err := db.Conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	deleteLinksSQL := `
+		DELETE FROM links
+		WHERE source_id = ?;
+	`
+	if _, err := tx.Exec(deleteLinksSQL, sourceID); err != nil {
+		return fmt.Errorf("failed to delete links: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

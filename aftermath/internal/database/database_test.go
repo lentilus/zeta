@@ -39,8 +39,8 @@ func TestUpdateZettel(t *testing.T) {
 	}
 }
 
-// TestUpdateLink verifies that the UpdateLink function updates a link correctly.
-func TestUpdateLink(t *testing.T) {
+// TestCreateLink verifies that the CreateLink function creates a link correctly.
+func TestCreateLink(t *testing.T) {
 	db := openTestDB(t)
 	defer closeTestDB(t, db)
 
@@ -51,7 +51,7 @@ func TestUpdateLink(t *testing.T) {
 		"checksum1",
 	)
 	if err != nil {
-		t.Fatalf("failed to insert initial zettel: %v", err)
+		t.Fatalf("failed to insert first zettel: %v", err)
 	}
 	_, err = db.Conn.Exec(
 		"INSERT INTO zettels (path, checksum) VALUES (?, ?)",
@@ -62,26 +62,65 @@ func TestUpdateLink(t *testing.T) {
 		t.Fatalf("failed to insert second zettel: %v", err)
 	}
 
-	// Insert a link
-	_, err = db.Conn.Exec("INSERT INTO links (source_id, target_id) VALUES (?, ?)", 1, 2)
+	// Create a link between the two zettels
+	err = db.CreateLink(1, 2)
 	if err != nil {
-		t.Fatalf("failed to insert initial link: %v", err)
+		t.Fatalf("CreateLink failed: %v", err)
 	}
 
-	// Update link using the struct
-	link := database.Link{ID: 1, SourceID: 2, TargetID: 1}
-	err = db.UpdateLink(link)
-	if err != nil {
-		t.Fatalf("UpdateLink failed: %v", err)
-	}
-
-	// Verify update
+	// Verify the link was created
 	var sourceID, targetID int
-	row := db.Conn.QueryRow("SELECT source_id, target_id FROM links WHERE id = ?", 1)
+	row := db.Conn.QueryRow(
+		"SELECT source_id, target_id FROM links WHERE source_id = ? AND target_id = ?",
+		1,
+		2,
+	)
 	if err := row.Scan(&sourceID, &targetID); err != nil {
-		t.Fatalf("failed to query updated link: %v", err)
+		t.Fatalf("failed to query created link: %v", err)
 	}
-	if sourceID != 2 || targetID != 1 {
-		t.Errorf("expected (2, 1), got (%d, %d)", sourceID, targetID)
+	if sourceID != 1 || targetID != 2 {
+		t.Errorf("expected (1, 2), got (%d, %d)", sourceID, targetID)
+	}
+}
+
+// TestDeleteLinks verifies that the DeleteLinks function deletes all outgoing links correctly.
+func TestDeleteLinks(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Insert a zettel
+	_, err := db.Conn.Exec(
+		"INSERT INTO zettels (path, checksum) VALUES (?, ?)",
+		"path1",
+		"checksum1",
+	)
+	if err != nil {
+		t.Fatalf("failed to insert zettel: %v", err)
+	}
+
+	// Create some links
+	err = db.CreateLink(1, 2)
+	if err != nil {
+		t.Fatalf("CreateLink failed: %v", err)
+	}
+	err = db.CreateLink(1, 3)
+	if err != nil {
+		t.Fatalf("CreateLink failed: %v", err)
+	}
+
+	// Delete links for zettel with ID 1
+	err = db.DeleteLinks(1)
+	if err != nil {
+		t.Fatalf("DeleteLinks failed: %v", err)
+	}
+
+	// Verify that the links were deleted
+	var count int
+	row := db.Conn.QueryRow("SELECT COUNT(*) FROM links WHERE source_id = ?", 1)
+	if err := row.Scan(&count); err != nil {
+		t.Fatalf("failed to count links: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 links, got %d", count)
 	}
 }

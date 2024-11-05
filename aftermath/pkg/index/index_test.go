@@ -3,6 +3,7 @@ package index_test
 import (
 	"aftermath/internal/database"
 	"aftermath/pkg/index"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -199,4 +200,90 @@ func TestLink2File(t *testing.T) {
 			t.Errorf("link2File(%q) = %q; expected %q", test.input, result, test.expected)
 		}
 	}
+}
+
+// openTestDB initializes an in-memory SQLite database using the database.NewDB function.
+func openBenchDB(b *testing.B) *database.DB {
+	b.Helper()
+	// Use SQLite's in-memory database for testing
+	db, err := database.NewDB(":memory:")
+	if err != nil {
+		b.Fatalf("failed to open test database: %v", err)
+	}
+	return db
+}
+
+// closeTestDB closes the database connection to release resources after each test.
+func closeBenchDB(b *testing.B, db *database.DB) {
+	b.Helper()
+	if err := db.Close(); err != nil {
+		b.Errorf("failed to close test database: %v", err)
+	}
+}
+
+// GenerateSyntheticFiles creates a number of .typ files with references to other files.
+func GenerateSyntheticFiles(dir string, numFiles int, numReferences int) error {
+	for i := 0; i < numFiles; i++ {
+		content := ""
+		// Generate content with random references to other files
+		for j := 0; j < numReferences; j++ {
+			ref := "@file" + fmt.Sprint('A'+(i+j)%numFiles) // reference to other files
+			content += ref + "\n"
+		}
+		// Write the file
+		if err := os.WriteFile(filepath.Join(dir, "file"+fmt.Sprint(i)+".typ"), []byte(content), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func BenchmarkIndex(b *testing.B) {
+	// Setup the in-memory SQLite database
+	db := openBenchDB(b)
+	defer closeBenchDB(b, db)
+
+	// Create a temporary directory for synthetic files
+	tempDir := b.TempDir()
+
+	// Generate 1000 synthetic files with 3 references each
+	err := GenerateSyntheticFiles(tempDir, 1000, 3)
+	if err != nil {
+		b.Fatalf("Failed to generate synthetic files: %v", err)
+	}
+
+	// Initialize the Indexer with the in-memory DB
+	indexer := index.NewIndexer(db, tempDir)
+
+	// Benchmark the initial indexing of all files
+	b.Run("Index All Files", func(b *testing.B) {
+		b.ResetTimer() // Reset timer before benchmarking
+		for i := 0; i < b.N; i++ {
+			if err := indexer.Index(); err != nil {
+				b.Fatalf("Indexing failed: %v", err)
+			}
+		}
+	})
+
+	// Modify five files to simulate changes
+	for i := 0; i < 5; i++ {
+		err := os.WriteFile(
+			filepath.Join(tempDir, "file"+fmt.Sprint(i)+".typ"),
+			[]byte("@file1\n"),
+			0644,
+		)
+		if err != nil {
+			b.Fatalf("Failed to modify file: %v", err)
+		}
+	}
+
+	// Benchmark indexing of changed files
+	b.Run("Index Changed Files", func(b *testing.B) {
+		b.ResetTimer() // Reset timer before benchmarking
+		for i := 0; i < b.N; i++ {
+			if err := indexer.Index(); err != nil {
+				b.Fatalf("Indexing changed files failed: %v", err)
+			}
+		}
+	})
 }

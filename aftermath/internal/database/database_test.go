@@ -5,6 +5,78 @@ import (
 	"testing"
 )
 
+// TestCreateZettel verifies that the CreateZettel function creates a zettel correctly.
+func TestCreateZettel(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Define the zettel parameters
+	path := "test_create_path"
+	checksum := []byte("test_create_checksum")
+
+	// Create the zettel using the CreateZettel function
+	err := db.CreateZettel(path, checksum)
+	if err != nil {
+		t.Fatalf("CreateZettel failed: %v", err)
+	}
+
+	// Verify that the zettel has been inserted into the database
+	var retrievedZettel database.Zettel
+	query := `SELECT id, path, checksum FROM zettels WHERE path = ?`
+	err = db.Conn.QueryRow(query, path).
+		Scan(&retrievedZettel.ID, &retrievedZettel.Path, &retrievedZettel.Checksum)
+	if err != nil {
+		t.Fatalf("failed to query created zettel: %v", err)
+	}
+
+	// Verify the retrieved zettel matches the input
+	if retrievedZettel.Path != path {
+		t.Errorf("expected path %s, got %s", path, retrievedZettel.Path)
+	}
+	if string(retrievedZettel.Checksum) != string(checksum) {
+		t.Errorf("expected checksum %s, got %s", checksum, retrievedZettel.Checksum)
+	}
+
+	// Check for duplicate creation
+	err = db.CreateZettel(path, checksum)
+	if err == nil {
+		t.Fatal("expected error for duplicate zettel creation, got nil")
+	}
+}
+
+// TestGetZettel verifies that the GetZettel function retrieves a zettel correctly.
+func TestGetZettel(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Insert a zettel to test retrieval
+	path := "test_path"
+	checksum := []byte("test_checksum")
+	if err := db.CreateZettel(path, checksum); err != nil {
+		t.Fatalf("failed to create test zettel: %v", err)
+	}
+
+	// Retrieve the zettel using the GetZettel function
+	retrievedZettel, err := db.GetZettel(path)
+	if err != nil {
+		t.Fatalf("GetZettel failed: %v", err)
+	}
+
+	// Verify the retrieved zettel matches the inserted zettel
+	if retrievedZettel.Path != path {
+		t.Errorf("expected path %s, got %s", path, retrievedZettel.Path)
+	}
+	if string(retrievedZettel.Checksum) != string(checksum) {
+		t.Errorf("expected checksum %s, got %s", checksum, retrievedZettel.Checksum)
+	}
+
+	// Test for a non-existent zettel
+	_, err = db.GetZettel("non_existent_path")
+	if err != database.ErrZettelNotFound {
+		t.Fatalf("expected ErrZettelNotFound, got: %v", err)
+	}
+}
+
 // TestUpdateZettel verifies that the UpdateZettel function updates a zettel correctly.
 func TestUpdateZettel(t *testing.T) {
 	db := openTestDB(t)

@@ -21,6 +21,18 @@ func NewIndexer(db *database.DB, dir string) *Indexer {
 	return &Indexer{db: db, dir: dir}
 }
 
+func (indexer *Indexer) Index() error {
+	changes, err := indexer.UpdateZettelIndex()
+	if err != nil {
+		return err
+	}
+	err = indexer.UpdateLinkIndex(changes)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // UpdateZettelIndex scans a directory, identifies new or changed zettels, and updates the database.
 // It returns a list of paths for zettels that were added or updated.
 func (indexer *Indexer) UpdateZettelIndex() ([]string, error) {

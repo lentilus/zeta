@@ -6,77 +6,110 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// GetAllZettels retrieves all zettels from the database.
-func (db *DB) GetAllZettels() ([]Zettel, error) {
-	query := `SELECT id, path, checksum, last_updated FROM zettels`
+// GetPathByID retrieves the path of a zettel given its ID.
+func (db *DB) GetPathByID(zettelID int) (string, error) {
+	var path string
+	query := `SELECT path FROM zettels WHERE id = ?`
+	err := db.Conn.QueryRow(query, zettelID).Scan(&path)
+	if err != nil {
+		return "", fmt.Errorf("failed to get path for zettel with ID %d: %w", zettelID, err)
+	}
+	return path, nil
+}
+
+// GetAllZettels retrieves all zettel paths from the database.
+func (db *DB) GetAllZettels() ([]string, error) {
+	query := `SELECT path FROM zettels`
 	rows, err := db.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all zettels: %w", err)
 	}
 	defer rows.Close()
 
-	var zettels []Zettel
+	var paths []string
 	for rows.Next() {
-		var zettel Zettel
-		if err := rows.Scan(&zettel.ID, &zettel.Path, &zettel.Checksum, &zettel.LastUpdated); err != nil {
-			return nil, fmt.Errorf("failed to scan zettel: %w", err)
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, fmt.Errorf("failed to scan path: %w", err)
 		}
-		zettels = append(zettels, zettel)
+		paths = append(paths, path)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
 	}
 
-	return zettels, nil
+	return paths, nil
 }
 
-// GetForwardLinks retrieves all forward links for a specific zettel identified by its ID.
-func (db *DB) GetForwardLinks(sourceID int) ([]Link, error) {
-	query := `SELECT id, source_id, target_id FROM links WHERE source_id = ?`
+// GetForwardLinks retrieves all forward links for a specific zettel, returning the paths of the linked zettels.
+func (db *DB) GetForwardLinks(sourceID int) ([]string, error) {
+	// First, get the target IDs for the forward links
+	query := `SELECT target_id FROM links WHERE source_id = ?`
 	rows, err := db.Conn.Query(query, sourceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get forward links: %w", err)
 	}
 	defer rows.Close()
 
-	var links []Link
+	var targetIDs []int
 	for rows.Next() {
-		var link Link
-		if err := rows.Scan(&link.ID, &link.SourceID, &link.TargetID); err != nil {
-			return nil, fmt.Errorf("failed to scan link: %w", err)
+		var targetID int
+		if err := rows.Scan(&targetID); err != nil {
+			return nil, fmt.Errorf("failed to scan target_id: %w", err)
 		}
-		links = append(links, link)
+		targetIDs = append(targetIDs, targetID)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
 	}
 
-	return links, nil
+	// Get the paths for the IDs
+	var paths []string
+	for _, targetID := range targetIDs {
+		path, err := db.GetPathByID(targetID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get path for target_id %d: %w", targetID, err)
+		}
+		paths = append(paths, path)
+	}
+
+	return paths, nil
 }
 
-// GetBackLinks retrieves all backward links for a specific zettel identified by its ID.
-func (db *DB) GetBackLinks(targetID int) ([]Link, error) {
-	query := `SELECT id, source_id, target_id FROM links WHERE target_id = ?`
+// GetBackLinks retrieves all backward links for a specific zettel, returning the paths of the linking zettels.
+func (db *DB) GetBackLinks(targetID int) ([]string, error) {
+	// First, get the source IDs for the backward links
+	query := `SELECT source_id FROM links WHERE target_id = ?`
 	rows, err := db.Conn.Query(query, targetID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get backward links: %w", err)
 	}
 	defer rows.Close()
 
-	var links []Link
+	var sourceIDs []int
 	for rows.Next() {
-		var link Link
-		if err := rows.Scan(&link.ID, &link.SourceID, &link.TargetID); err != nil {
-			return nil, fmt.Errorf("failed to scan link: %w", err)
+		var sourceID int
+		if err := rows.Scan(&sourceID); err != nil {
+			return nil, fmt.Errorf("failed to scan source_id: %w", err)
 		}
-		links = append(links, link)
+		sourceIDs = append(sourceIDs, sourceID)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
 	}
 
-	return links, nil
+	// Get the paths for the IDs
+	var paths []string
+	for _, sourceID := range sourceIDs {
+		path, err := db.GetPathByID(sourceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get path for source_id %d: %w", sourceID, err)
+		}
+		paths = append(paths, path)
+	}
+
+	return paths, nil
 }

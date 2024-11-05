@@ -1,0 +1,202 @@
+package index_test
+
+import (
+	"aftermath/internal/database"
+	"aftermath/pkg/index"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"testing"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+// openTestDB initializes an in-memory SQLite database using the database.NewDB function.
+func openTestDB(t *testing.T) *database.DB {
+	t.Helper()
+	// Use SQLite's in-memory database for testing
+	db, err := database.NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+	return db
+}
+
+// closeTestDB closes the database connection to release resources after each test.
+func closeTestDB(t *testing.T, db *database.DB) {
+	t.Helper()
+	if err := db.Close(); err != nil {
+		t.Errorf("failed to close test database: %v", err)
+	}
+}
+
+func TestFindPaths(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir := t.TempDir()
+
+	// Create test files
+	files := []string{"test1.typ", "test2.typ", ".hidden.typ", "test.txt"}
+	for _, file := range files {
+		os.WriteFile(filepath.Join(tempDir, file), []byte(""), 0644)
+	}
+
+	// Initialize the Indexer with a nil database (not used in this test)
+	indexer := index.NewIndexer(nil, tempDir)
+
+	// Call findPaths and verify the results
+	paths := indexer.FindPaths()
+	expectedPaths := []string{
+		filepath.Join(tempDir, "test1.typ"),
+		filepath.Join(tempDir, "test2.typ"),
+		filepath.Join(tempDir, ".hidden.typ"),
+	}
+
+	sort.Strings(paths)
+	sort.Strings(expectedPaths)
+
+	if !reflect.DeepEqual(paths, expectedPaths) {
+		t.Errorf("Expected %v, got %v", expectedPaths, paths)
+	}
+}
+
+func TestUpdateZettelIndex(t *testing.T) {
+	// Setup the in-memory SQLite database
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Initialize the Indexer with the in-memory DB
+	tempDir := t.TempDir()
+	indexer := index.NewIndexer(db, tempDir)
+
+	// Create initial test files
+	os.WriteFile(filepath.Join(tempDir, "newfile.typ"), []byte("new content"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "oldfile.typ"), []byte("updated content"), 0644)
+
+	// Add an existing zettel to the DB
+	err := db.CreateZettel(database.Zettel{
+		Path:        filepath.Join(tempDir, "oldfile.typ"),
+		Checksum:    []byte("old_checksum"),
+		LastUpdated: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call UpdateZettelIndex
+	changedZettels, err := indexer.UpdateZettelIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Expected paths that should be returned as changed
+	expectedChanged := []string{
+		filepath.Join(tempDir, "newfile.typ"),
+		filepath.Join(tempDir, "oldfile.typ"),
+	}
+	if !reflect.DeepEqual(changedZettels, expectedChanged) {
+		t.Errorf("Expected %v, got %v", expectedChanged, changedZettels)
+	}
+}
+
+// TestIndexLinks tests the indexing of links between zettels.
+func TestIndexLinks(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Create an indexer
+	indexer := index.NewIndexer(db, "")
+
+	// Prepare test zettels
+	targetZettel := database.Zettel{Path: "target.typ", Checksum: []byte("checksum1")}
+	randomZettel := database.Zettel{Path: "random.typ", Checksum: []byte("checksum2")}
+
+	// Insert test zettels into the database
+	if err := db.CreateZettel(targetZettel); err != nil {
+		t.Fatalf("failed to create zettel1: %v", err)
+	}
+	if err := db.CreateZettel(randomZettel); err != nil {
+		t.Fatalf("failed to create zettel2: %v", err)
+	}
+
+	// Create a zettel that references the first zettel
+	content := "This is a reference to @target."
+	path := filepath.Join(t.TempDir(), "source.typ")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to create referencing zettel: %v", err)
+	}
+
+	// Insert the referencing zettel into the database
+	sourceZettel := database.Zettel{Path: path, Checksum: []byte("checksum3")}
+	if err := db.CreateZettel(sourceZettel); err != nil {
+		t.Fatalf("failed to create referencing zettel: %v", err)
+	}
+
+	// get the IDs from the database
+	source, err := db.GetZettel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := db.GetZettel("target.typ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Update the indexer with the changed zettels
+	changedZettels := []string{path}
+	if err := indexer.UpdateLinkIndex(changedZettels); err != nil {
+		t.Fatalf("failed to update link index: %v", err)
+	}
+
+	// Verify the link was created
+	var links []database.Link
+	query := `SELECT source_id, target_id FROM links;`
+	rows, err := db.Conn.Query(query)
+	if err != nil {
+		t.Fatalf("failed to query links: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var link database.Link
+		if err := rows.Scan(&link.SourceID, &link.TargetID); err != nil {
+			t.Fatalf("failed to scan link: %v", err)
+		}
+		links = append(links, link)
+	}
+
+	// Assert that exactly one link was created
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	// Verify the correct source and target IDs
+	if links[0].SourceID != source.ID || links[0].TargetID != target.ID {
+		t.Errorf(
+			"expected link from %d to %d, got from %d to %d",
+			sourceZettel.ID,
+			targetZettel.ID,
+			links[0].SourceID,
+			links[0].TargetID,
+		)
+	}
+}
+
+func TestLink2File(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"foo.bar", "foo/bar.typ"},
+		{"foo.bar.baz", "foo/bar/baz.typ"},
+		{"foo_bar", "foo_bar.typ"},
+		{"foo-bar", "foo-bar.typ"},
+		{"foo.bar-baz.qux", "foo/bar-baz/qux.typ"},
+	}
+
+	for _, test := range tests {
+		result := index.Link2File(test.input)
+		if result != test.expected {
+			t.Errorf("link2File(%q) = %q; expected %q", test.input, result, test.expected)
+		}
+	}
+}

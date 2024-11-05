@@ -8,7 +8,7 @@ import (
 var ErrZettelNotFound = fmt.Errorf("zettel does not exist in db")
 
 // CreateZettel creates a new zettel in the database.
-func (db *DB) CreateZettel(path string, checksum []byte) error {
+func (db *DB) CreateZettel(zettel Zettel) error {
 	tx, err := db.Conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -16,10 +16,10 @@ func (db *DB) CreateZettel(path string, checksum []byte) error {
 	defer tx.Rollback()
 
 	createZettelSQL := `
-		INSERT INTO zettels (path, checksum)
-		VALUES (?, ?);
+		INSERT INTO zettels (path, checksum, last_updated)
+		VALUES (?, ?, ?);
 	`
-	if _, err := tx.Exec(createZettelSQL, path, checksum); err != nil {
+	if _, err := tx.Exec(createZettelSQL, zettel.Path, zettel.Checksum, zettel.LastUpdated); err != nil {
 		return fmt.Errorf("failed to create zettel: %w", err)
 	}
 
@@ -33,8 +33,9 @@ func (db *DB) CreateZettel(path string, checksum []byte) error {
 // GetZettel retrieves a zettel by path, or returns an error if it does not exist
 func (db *DB) GetZettel(path string) (*Zettel, error) {
 	var zettel Zettel
-	query := `SELECT id, path, checksum FROM zettels WHERE path = ?`
-	err := db.Conn.QueryRow(query, path).Scan(&zettel.ID, &zettel.Path, &zettel.Checksum)
+	query := `SELECT id, path, checksum, last_updated FROM zettels WHERE path = ?`
+	err := db.Conn.QueryRow(query, path).
+		Scan(&zettel.ID, &zettel.Path, &zettel.Checksum, &zettel.LastUpdated)
 
 	if err == sql.ErrNoRows {
 		// Zettel not found
@@ -46,7 +47,7 @@ func (db *DB) GetZettel(path string) (*Zettel, error) {
 	return &zettel, nil
 }
 
-// UpdateZettel updates the path and checksum of a zettel in the database.
+// UpdateZettel updates the path, checksum, and last_updated fields of a zettel in the database.
 func (db *DB) UpdateZettel(zettel Zettel) error {
 	tx, err := db.Conn.Begin()
 	if err != nil {
@@ -56,10 +57,10 @@ func (db *DB) UpdateZettel(zettel Zettel) error {
 
 	updateZettelSQL := `
 		UPDATE zettels
-		SET path = ?, checksum = ?
+		SET path = ?, checksum = ?, last_updated = ?
 		WHERE id = ?;
 	`
-	if _, err := tx.Exec(updateZettelSQL, zettel.Path, zettel.Checksum, zettel.ID); err != nil {
+	if _, err := tx.Exec(updateZettelSQL, zettel.Path, zettel.Checksum, zettel.LastUpdated, zettel.ID); err != nil {
 		return fmt.Errorf("failed to update zettel: %w", err)
 	}
 

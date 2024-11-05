@@ -9,9 +9,10 @@ type DB struct {
 
 // Zettel represents a single zettel in the database.
 type Zettel struct {
-	ID       int
-	Path     string
-	Checksum []byte
+	ID          int
+	Path        string
+	Checksum    []byte
+	LastUpdated int64
 }
 
 // Link represents a relationship between two zettels in the database.

@@ -57,7 +57,8 @@ func (db *DB) createTables(tx *sql.Tx) error {
 	CREATE TABLE IF NOT EXISTS zettels (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		path TEXT UNIQUE NOT NULL,
-		checksum BLOB NOT NULL
+		checksum BLOB NOT NULL,
+		last_updated INTEGER NOT NULL
 	);
 	`
 

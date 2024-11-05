@@ -7,22 +7,20 @@ import (
 
 var ErrZettelNotFound = fmt.Errorf("zettel does not exist in db")
 
-// CreateZettel creates a new zettel in the database.
-func (db *DB) CreateZettel(zettel Zettel) error {
+// Helper function to perform transactions and execute SQL statements
+func (db *DB) executeTransaction(query string, args ...interface{}) error {
 	tx, err := db.Conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	createZettelSQL := `
-		INSERT INTO zettels (path, checksum, last_updated)
-		VALUES (?, ?, ?);
-	`
-	if _, err := tx.Exec(createZettelSQL, zettel.Path, zettel.Checksum, zettel.LastUpdated); err != nil {
-		return fmt.Errorf("failed to create zettel: %w", err)
+	// Execute the query
+	if _, err := tx.Exec(query, args...); err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
 	}
 
+	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -47,72 +45,54 @@ func (db *DB) GetZettel(path string) (*Zettel, error) {
 	return &zettel, nil
 }
 
+// CreateZettel creates a new zettel in the database.
+func (db *DB) CreateZettel(zettel Zettel) error {
+	createZettelSQL := `
+		INSERT INTO zettels (path, checksum, last_updated)
+		VALUES (?, ?, ?);
+	`
+	return db.executeTransaction(
+		createZettelSQL,
+		zettel.Path,
+		zettel.Checksum,
+		zettel.LastUpdated,
+	)
+}
+
 // UpdateZettel updates the path, checksum, and last_updated fields of a zettel in the database.
 func (db *DB) UpdateZettel(zettel Zettel) error {
-	tx, err := db.Conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
 	updateZettelSQL := `
 		UPDATE zettels
 		SET path = ?, checksum = ?, last_updated = ?
 		WHERE id = ?;
 	`
-	if _, err := tx.Exec(updateZettelSQL, zettel.Path, zettel.Checksum, zettel.LastUpdated, zettel.ID); err != nil {
-		return fmt.Errorf("failed to update zettel: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+	return db.executeTransaction(
+		updateZettelSQL,
+		zettel.Path,
+		zettel.Checksum,
+		zettel.LastUpdated,
+		zettel.ID,
+	)
 }
 
 // CreateLink creates a new link between two zettels in the database.
 func (db *DB) CreateLink(sourceID, targetID int) error {
-	tx, err := db.Conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
 	createLinkSQL := `
 		INSERT INTO links (source_id, target_id)
 		VALUES (?, ?);
 	`
-	if _, err := tx.Exec(createLinkSQL, sourceID, targetID); err != nil {
-		return fmt.Errorf("failed to create link: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+	return db.executeTransaction(
+		createLinkSQL,
+		sourceID,
+		targetID,
+	)
 }
 
 // DeleteLinks deletes all outgoing links from a specified zettel in the database.
 func (db *DB) DeleteLinks(sourceID int) error {
-	tx, err := db.Conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
 	deleteLinksSQL := `
 		DELETE FROM links
 		WHERE source_id = ?;
 	`
-	if _, err := tx.Exec(deleteLinksSQL, sourceID); err != nil {
-		return fmt.Errorf("failed to delete links: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+	return db.executeTransaction(deleteLinksSQL, sourceID)
 }

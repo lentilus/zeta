@@ -2,6 +2,7 @@ package index
 
 import (
 	"aftermath/internal/database"
+	"aftermath/internal/parser"
 	"aftermath/internal/utils"
 	"fmt"
 	"os"
@@ -29,6 +30,8 @@ func (indexer *Indexer) Index() error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Changes are:")
+	fmt.Println(changes)
 	err = indexer.UpdateLinkIndex(changes)
 	if err != nil {
 		return err
@@ -134,10 +137,9 @@ func (indexer *Indexer) UpdateLinkIndex(zettelPaths []string) error {
 
 func (indexer *Indexer) IndexLinks(content []byte, sourceID int) error {
 	// Define the query to find references in the content
-	query := `((ref) @reference)`
 
 	// Use GetReferences to extract links from content
-	references, err := GetReferences(content, []byte(query))
+	references, err := parser.GetReferences(content)
 	if err != nil {
 		return fmt.Errorf("failed to extract references: %w", err)
 	}

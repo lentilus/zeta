@@ -1,14 +1,15 @@
-package index
+package parser
 
 import (
 	"aftermath/bindings"
-	"fmt"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+var refQuery = []byte(`((ref) @reference)`)
+
 // Get zettel references by a treesitter query from file content.
-func GetReferences(content []byte, refQuery []byte) ([]string, error) {
+func GetReferences(content []byte) ([]string, error) {
 	parser := sitter.NewParser()
 	defer parser.Close()
 
@@ -42,14 +43,4 @@ func GetReferences(content []byte, refQuery []byte) ([]string, error) {
 	}
 
 	return results, nil
-}
-
-func main() {
-	query := `(
-  (ref) @reference
-)`
-	content := ` @foo
-    hello`
-
-	fmt.Print(GetReferences([]byte(content), []byte(query)))
 }

@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// Precompiled regex pattern to remove invalid characters (anything other than A-Z, a-z, 0-9, ., -, and _)
+var validCharPattern = regexp.MustCompile(`[^\w.-]+`)
+
 // Indexer struct holds the reference to the database and other configurations
 type Indexer struct {
 	db  *database.DB
@@ -141,7 +144,7 @@ func (indexer *Indexer) IndexLinks(content []byte, sourceID int) error {
 
 	for _, ref := range references {
 		// Convert reference to a file path format
-		refPath := Link2File(ref)
+		refPath := indexer.Link2File(ref)
 
 		// Retrieve the zettel by path from the database
 		targetZettel, err := indexer.db.GetZettel(refPath)
@@ -163,16 +166,10 @@ func (indexer *Indexer) IndexLinks(content []byte, sourceID int) error {
 	return nil
 }
 
-func Link2File(reference string) string {
-	// Define a regex pattern that allows only valid characters: . , A-Z, a-z, - and _
-	pattern := regexp.MustCompile(`[^\w.-]+`)
-
-	// Replace invalid characters with an empty string
-	validRef := pattern.ReplaceAllString(reference, "")
-
-	// Replace dots with slashes to convert "foo.bar" to "foo/bar"
-	result := strings.ReplaceAll(validRef, ".", "/")
-
-	// Append ".typ" to the result
-	return result + ".typ"
+// Link2File converts a given reference to a file path
+func (indexer *Indexer) Link2File(reference string) string {
+	// Remove any invalid characters from the reference
+	validRef := validCharPattern.ReplaceAllString(reference, "")
+	path := strings.ReplaceAll(validRef, ".", "/")
+	return filepath.Join(indexer.dir, path) + ".typ"
 }

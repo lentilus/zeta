@@ -238,7 +238,7 @@ func TestDeleteLinks(t *testing.T) {
 	}
 
 	// Delete links for zettel with path "path1"
-	err = db.DeleteLinks(1) // Assuming the ID for "path1" is 1
+	err = db.DeleteLinks("path1") // Updated to use path instead of id
 	if err != nil {
 		t.Fatalf("DeleteLinks failed: %v", err)
 	}

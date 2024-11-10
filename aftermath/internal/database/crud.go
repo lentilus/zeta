@@ -102,13 +102,15 @@ func (db *DB) CreateLink(sourcePath, targetPath string) error {
 	return nil
 }
 
-// DeleteLinks deletes all outgoing links from a specified zettel in the database.
-func (db *DB) DeleteLinks(sourceID int) error {
+// DeleteLinks deletes all outgoing links from a specified zettel path in the database.
+func (db *DB) DeleteLinks(path string) error {
 	deleteLinksSQL := `
 		DELETE FROM links
-		WHERE source_id = ?;
+		WHERE source_id = (
+			SELECT id FROM zettels WHERE path = ? LIMIT 1
+		);
 	`
-	return db.executeTransaction(deleteLinksSQL, sourceID)
+	return db.executeTransaction(deleteLinksSQL, path)
 }
 
 // UpsertZettel inserts a new zettel or updates it if it already exists.

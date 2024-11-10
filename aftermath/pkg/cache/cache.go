@@ -24,18 +24,6 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
-// Utilizes the CPU for `n` milliseconds.
-func utilizeCPU(n int) {
-	// Record the start time
-	start := time.Now()
-
-	// Run the CPU-intensive task for approximately `n` milliseconds
-	for time.Since(start) < time.Duration(n)*time.Microsecond {
-		// Perform some work, here we use a simple loop to generate some load
-		_ = 1 + 1 // A trivial operation, but it consumes CPU time
-	}
-}
-
 // walkDirectory walks through the directory, sending file metadata to a channel.
 func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.WaitGroup) {
 	defer wg.Done()

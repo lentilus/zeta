@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"aftermath/bindings"
 	"aftermath/internal/database"
 	"aftermath/internal/parser"
 	"aftermath/internal/utils"
@@ -11,8 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	sitter "github.com/smacker/go-tree-sitter"
 )
 
 // FileMetadata holds the file path and its last modified timestamp.
@@ -91,8 +88,6 @@ func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error
 	if err != nil {
 		return err
 	}
-	_ = sitter.NewLanguage(bindings.Language())
-
 	processorChan := make(chan ZettelUpdate, 10000)
 
 	var processWg sync.WaitGroup

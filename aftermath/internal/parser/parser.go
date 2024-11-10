@@ -8,20 +8,31 @@ import (
 
 var refQuery = []byte(`((ref) @reference)`)
 
-// Get zettel references by a treesitter query from file content.
-func GetReferences(content []byte) ([]string, error) {
-	parser := sitter.NewParser()
-	defer parser.Close()
+type Parser struct {
+	parser *sitter.Parser
+	lang   *sitter.Language
+}
 
+func NewParser() *Parser {
+	parser := sitter.NewParser()
 	lang := sitter.NewLanguage(bindings.Language())
 	parser.SetLanguage(lang)
+	return &Parser{parser: parser, lang: lang}
+}
+
+func (parser *Parser) CloseParser() {
+	parser.parser.Close()
+}
+
+// Get zettel references by a treesitter query from file content.
+func (parser *Parser) GetReferences(content []byte) ([]string, error) {
 
 	// Parse the source code
-	tree := parser.Parse(nil, content)
+	tree := parser.parser.Parse(nil, content)
 	defer tree.Close()
 
 	// Query the tree
-	query, err := sitter.NewQuery([]byte(refQuery), lang)
+	query, err := sitter.NewQuery([]byte(refQuery), parser.lang)
 	if err != nil {
 		return []string{}, err
 	}

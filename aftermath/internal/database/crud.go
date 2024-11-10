@@ -75,17 +75,31 @@ func (db *DB) UpdateZettel(zettel Zettel) error {
 	)
 }
 
-// CreateLink creates a new link between two zettels in the database.
-func (db *DB) CreateLink(sourceID, targetID int) error {
+// CreateLinkByPaths creates a new link between two zettels in the database using their paths.
+func (db *DB) CreateLink(sourcePath, targetPath string) error {
 	createLinkSQL := `
 		INSERT INTO links (source_id, target_id)
-		VALUES (?, ?);
+		SELECT s.id, t.id
+		FROM zettels s
+		JOIN zettels t ON t.path = ?
+		WHERE s.path = ?;
 	`
-	return db.executeTransaction(
-		createLinkSQL,
-		sourceID,
-		targetID,
-	)
+
+	result, err := db.Conn.Exec(createLinkSQL, targetPath, sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to create link: %w", err)
+	}
+
+	// Check if the link was created by verifying affected rows
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("link creation failed: one or both paths do not exist")
+	}
+
+	return nil
 }
 
 // DeleteLinks deletes all outgoing links from a specified zettel in the database.

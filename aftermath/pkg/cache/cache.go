@@ -26,7 +26,7 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
-// fileNameFilter takes a filename and return true if it is a zettel, false if it is not.
+// fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
 func fileNameFilter(name string) bool {
 	return name[len(name)-4:] == ".typ"
 }

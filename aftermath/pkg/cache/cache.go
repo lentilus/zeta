@@ -31,6 +31,26 @@ func fileNameFilter(name string) bool {
 	return name[len(name)-4:] == ".typ"
 }
 
+// UpdateIncremental is the main function to set up the directory walking and processing routines.
+func UpdateIncremental(dir string) {
+	fileMetadataChan := make(chan FileMetadata, 10000)
+	var wg sync.WaitGroup
+
+	// Start directory walking
+	wg.Add(1)
+	go findUpdates(fileMetadataChan, &wg)
+
+	// Start metadata processing
+	wg.Add(1)
+	go func() {
+		walkDirectory(dir, fileMetadataChan, &wg)
+		close(fileMetadataChan)
+	}()
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+}
+
 // walkDirectory walks through the directory, sending file metadata to a channel.
 func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -154,27 +174,4 @@ func processUpdates(db *database.DB, updateChan <-chan ZettelUpdate, wg *sync.Wa
 			fmt.Println(err)
 		}
 	}
-}
-
-// UpdateIncremental is the main function to set up the directory walking and processing routines.
-func UpdateIncremental(dir string) {
-	// Channel to send file metadata for concurrent processing
-	fileMetadataChan := make(chan FileMetadata, 10000)
-
-	// WaitGroup to wait for all goroutines
-	var wg sync.WaitGroup
-
-	// Start the directory walking goroutine
-	wg.Add(1)
-	go findUpdates(fileMetadataChan, &wg)
-
-	// Start the metadata processing goroutine
-	wg.Add(1)
-	go func() {
-		walkDirectory(dir, fileMetadataChan, &wg)
-		close(fileMetadataChan)
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
 }

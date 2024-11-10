@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -37,6 +38,31 @@ func (db *DB) GetAll() (map[string]Zettel, error) {
 	}
 
 	return zettelMap, nil
+}
+
+// DeleteZettels deletes zettels from the database based on a list of IDs.
+func (db *DB) DeleteZettels(ids []int) error {
+	if len(ids) == 0 {
+		return nil // No IDs provided, nothing to delete.
+	}
+
+	// Prepare placeholders for the SQL query.
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?" // Add a placeholder for each ID
+		args[i] = id          // Add the ID as an argument
+	}
+
+	query := fmt.Sprintf(`DELETE FROM zettels WHERE id IN (%s)`, strings.Join(placeholders, ","))
+
+	// Execute the delete query with the provided IDs.
+	_, err := db.Conn.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete zettels: %w", err)
+	}
+
+	return nil
 }
 
 // GetForwardLinks retrieves all forward links for a zettel based on its path, returning the paths of the linked zettels.

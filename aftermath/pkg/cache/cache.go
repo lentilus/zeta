@@ -96,6 +96,17 @@ func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error
 		processorChan <- ZettelUpdate{zettel: z, metadata: metadata}
 	}
 	close(processorChan)
+
+	// Delete all zettels left in zettels (the deleted ones) from DB
+	var ids []int
+	for _, z := range zettels {
+		ids = append(ids, z.ID)
+	}
+	db.DeleteZettels(ids)
+
+	fmt.Print("deleted old zettels:")
+	fmt.Println(ids)
+
 	processWg.Wait()
 	return nil
 }

@@ -12,6 +12,33 @@ func (db *DB) GetAllZettels() ([]string, error) {
 	return db.getStringsFromQuery(query)
 }
 
+// GetAll loads all zettels from the database and stores them in a map keyed by path for fast retrieval.
+func (db *DB) GetAll() (map[string]Zettel, error) {
+	query := `SELECT id, path, checksum, last_updated FROM zettels`
+
+	rows, err := db.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve zettels: %w", err)
+	}
+	defer rows.Close()
+
+	zettelMap := make(map[string]Zettel)
+	for rows.Next() {
+		var z Zettel
+		if err := rows.Scan(&z.ID, &z.Path, &z.Checksum, &z.LastUpdated); err != nil {
+			return nil, fmt.Errorf("failed to scan zettel: %w", err)
+		}
+		// Use z.Path as the key for quick lookup by path
+		zettelMap[z.Path] = z
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
+	}
+
+	return zettelMap, nil
+}
+
 // GetForwardLinks retrieves all forward links for a zettel based on its path, returning the paths of the linked zettels.
 func (db *DB) GetForwardLinks(sourcePath string) ([]string, error) {
 	query := `

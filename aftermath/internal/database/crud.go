@@ -96,3 +96,15 @@ func (db *DB) DeleteLinks(sourceID int) error {
 	`
 	return db.executeTransaction(deleteLinksSQL, sourceID)
 }
+
+// UpsertZettel inserts a new zettel or updates it if it already exists.
+func (db *DB) UpsertZettel(zettel Zettel) error {
+	query := `
+		INSERT INTO zettels (path, checksum, last_updated)
+		VALUES (?, ?, ?)
+		ON CONFLICT(path) DO UPDATE SET
+			checksum = excluded.checksum,
+			last_updated = excluded.last_updated;
+	`
+	return db.executeTransaction(query, zettel.Path, zettel.Checksum, zettel.LastUpdated)
+}

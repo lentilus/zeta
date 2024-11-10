@@ -4,6 +4,8 @@ import (
 	"aftermath/bindings"
 	"aftermath/internal/database"
 	"aftermath/internal/parser"
+	"aftermath/internal/utils"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +26,11 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
+// fileNameFilter takes a filename and return true if it is a zettel, false if it is not.
+func fileNameFilter(name string) bool {
+	return name[len(name)-4:] == ".typ"
+}
+
 // walkDirectory walks through the directory, sending file metadata to a channel.
 func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -34,7 +41,8 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 			fmt.Printf("error accessing path %q: %v\n", path, err)
 			return nil
 		}
-		if info.IsDir() {
+
+		if !fileNameFilter(path) {
 			return nil
 		}
 		// If it is a file, send its metadata to the channel.
@@ -59,6 +67,7 @@ func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error
 		return err
 	}
 	zettels, err := db.GetAll()
+	fmt.Printf("%d zettels stored in db\n", len(zettels))
 	if err != nil {
 		return err
 	}
@@ -104,35 +113,46 @@ func processUpdates(db *database.DB, updateChan <-chan ZettelUpdate, wg *sync.Wa
 	parser := parser.NewParser()
 	defer parser.CloseParser()
 
+	newLinks := make(map[string][]string)
+
 	for u := range updateChan {
-		_ = u.zettel
+		z := u.zettel
 		m := u.metadata
 
-		fmt.Printf("Updating %s", m.Path)
+		fmt.Printf("Updating %s\n", m.Path)
 
+		// Read file content
 		content, err := os.ReadFile(m.Path)
 		if err != nil {
 			fmt.Println("Error:", err)
 			continue
 		}
 
+		// Compare Checksums
+		checksum := utils.ComputeChecksum(content)
+		if bytes.Equal(checksum, z.Checksum) {
+			fmt.Println("Nothing to do")
+			continue
+		}
+
+		// Get references
 		refs, err := parser.GetReferences(content)
 		if err != nil {
 			fmt.Println("Error:", err)
+		} else {
+			newLinks[m.Path] = refs
 		}
 
-		for r := range refs {
-			fmt.Printf("Adding ref to %d", r)
-			// TODO: actually add refs
-		}
-
-		db.CreateZettel(
+		err = db.UpsertZettel(
 			database.Zettel{
 				LastUpdated: m.LastModified.Unix(),
 				Path:        m.Path,
-				Checksum:    []byte("hu"),
+				Checksum:    checksum,
 			},
 		)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 

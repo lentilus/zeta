@@ -139,8 +139,7 @@ func TestUpdateZettel(t *testing.T) {
 	}
 }
 
-// TestCreateLink verifies that the CreateLink function creates a link correctly.
-func TestCreateLink(t *testing.T) {
+func TestCreateLinkByPaths(t *testing.T) {
 	db := openTestDB(t)
 	defer closeTestDB(t, db)
 
@@ -168,18 +167,18 @@ func TestCreateLink(t *testing.T) {
 		t.Fatalf("failed to insert second zettel: %v", err)
 	}
 
-	// Create a link between the two zettels
-	err = db.CreateLink(1, 2)
+	// Create a link between the two zettels using paths
+	err = db.CreateLink("path1", "path2")
 	if err != nil {
-		t.Fatalf("CreateLink failed: %v", err)
+		t.Fatalf("CreateLinkByPaths failed: %v", err)
 	}
 
 	// Verify that the link was created
 	var sourceID, targetID int
 	row := db.Conn.QueryRow(
-		"SELECT source_id, target_id FROM links WHERE source_id = ? AND target_id = ?",
-		1,
-		2,
+		"SELECT source_id, target_id FROM links WHERE source_id = (SELECT id FROM zettels WHERE path = ?) AND target_id = (SELECT id FROM zettels WHERE path = ?)",
+		"path1",
+		"path2",
 	)
 	if err := row.Scan(&sourceID, &targetID); err != nil {
 		t.Fatalf("failed to query created link: %v", err)
@@ -228,25 +227,28 @@ func TestDeleteLinks(t *testing.T) {
 		t.Fatalf("failed to insert third zettel: %v", err)
 	}
 
-	// Create links from zettel with ID 1 to zettels with ID 2 and 3
-	err = db.CreateLink(1, 2)
+	// Create links from zettel with path "path1" to zettels with path "path2" and "path3"
+	err = db.CreateLink("path1", "path2")
 	if err != nil {
-		t.Fatalf("CreateLink failed: %v", err)
+		t.Fatalf("CreateLinkByPaths failed: %v", err)
 	}
-	err = db.CreateLink(1, 3)
+	err = db.CreateLink("path1", "path3")
 	if err != nil {
-		t.Fatalf("CreateLink failed: %v", err)
+		t.Fatalf("CreateLinkByPaths failed: %v", err)
 	}
 
-	// Delete links for zettel with ID 1
-	err = db.DeleteLinks(1)
+	// Delete links for zettel with path "path1"
+	err = db.DeleteLinks("path1") // Updated to use path instead of id
 	if err != nil {
 		t.Fatalf("DeleteLinks failed: %v", err)
 	}
 
 	// Verify that the links were deleted
 	var count int
-	row := db.Conn.QueryRow("SELECT COUNT(*) FROM links WHERE source_id = ?", 1)
+	row := db.Conn.QueryRow(
+		"SELECT COUNT(*) FROM links WHERE source_id = (SELECT id FROM zettels WHERE path = ?)",
+		"path1",
+	)
 	if err := row.Scan(&count); err != nil {
 		t.Fatalf("failed to count links: %v", err)
 	}

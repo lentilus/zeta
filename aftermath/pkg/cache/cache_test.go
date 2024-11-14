@@ -28,8 +28,11 @@ func TestUpdateIncremental(t *testing.T) {
 	defer trace.Stop() // Stop tracing when main exits
 
 	// Directory to walk (replace this with the actual directory you want to test on)
-	dir := "/home/lentilus/typstest"
+	kasten := cache.NewZettelkasten(
+		"/home/lentilus/typstest",
+		"/home/lentilus/typstest/cache.sqlite",
+	)
 
 	// Run the main program logic
-	cache.UpdateIncremental(dir)
+	kasten.UpdateIncremental()
 }

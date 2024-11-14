@@ -23,24 +23,33 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
+type Zettelkasten struct {
+	root  string
+	cache string
+}
+
+func NewZettelkasten(root string, cache string) *Zettelkasten {
+	return &Zettelkasten{root: root, cache: cache}
+}
+
 // fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
 func fileNameFilter(name string) bool {
 	return name[len(name)-4:] == ".typ"
 }
 
 // UpdateIncremental is the main function to set up the directory walking and processing routines.
-func UpdateIncremental(dir string) {
+func (k *Zettelkasten) UpdateIncremental() {
 	fileMetadataChan := make(chan FileMetadata, 10000)
 	var wg sync.WaitGroup
 
 	// Start directory walking
 	wg.Add(1)
-	go findUpdates(fileMetadataChan, &wg)
+	go k.findUpdates(fileMetadataChan, &wg)
 
 	// Start metadata processing
 	wg.Add(1)
 	go func() {
-		walkDirectory(dir, fileMetadataChan, &wg)
+		walkDirectory(k.root, fileMetadataChan, &wg)
 		close(fileMetadataChan)
 	}()
 
@@ -76,10 +85,10 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 }
 
 // findUpdates reads file metadata from the channel and processes it.
-func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
+func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
-	db, err := database.NewDB("/home/lentilus/typstest/db.sqlite")
+	db, err := database.NewDB(k.cache)
 	if err != nil {
 		return err
 	}
@@ -92,7 +101,7 @@ func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error
 
 	var processWg sync.WaitGroup
 	processWg.Add(1)
-	go processUpdates(db, processorChan, &processWg)
+	go k.processUpdates(db, processorChan, &processWg)
 
 	for metadata := range fileMetadataChan {
 		z, exists := zettels[metadata.Path]
@@ -116,14 +125,15 @@ func findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error
 	}
 	db.DeleteZettels(ids)
 
-	fmt.Print("deleted old zettels:")
-	fmt.Println(ids)
-
 	processWg.Wait()
 	return nil
 }
 
-func processUpdates(db *database.DB, updateChan <-chan ZettelUpdate, wg *sync.WaitGroup) {
+func (k *Zettelkasten) processUpdates(
+	db *database.DB,
+	updateChan <-chan ZettelUpdate,
+	wg *sync.WaitGroup,
+) {
 	defer wg.Done()
 	parser := parser.NewParser()
 	defer parser.CloseParser()
@@ -133,8 +143,6 @@ func processUpdates(db *database.DB, updateChan <-chan ZettelUpdate, wg *sync.Wa
 	for u := range updateChan {
 		z := u.zettel
 		m := u.metadata
-
-		fmt.Printf("Updating %s\n", m.Path)
 
 		// Read file content
 		content, err := os.ReadFile(m.Path)
@@ -169,4 +177,34 @@ func processUpdates(db *database.DB, updateChan <-chan ZettelUpdate, wg *sync.Wa
 			fmt.Println(err)
 		}
 	}
+	err := k.updateLinks(db, newLinks)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+}
+
+func (k *Zettelkasten) updateLinks(db *database.DB, newLinks map[string][]string) error {
+	for z, refs := range newLinks {
+		err := db.DeleteLinks(z)
+		if err != nil {
+			return err
+		}
+		for _, ref := range refs {
+			link := ref2Link(ref, k.root)
+			err = db.CreateLink(z, link)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func ref2Link(ref string, base string) string {
+	if len(ref) < 2 {
+		return ""
+	}
+	file := ref[1:] // remove @ref -> ref
+	return filepath.Join(base, file+".typ")
 }

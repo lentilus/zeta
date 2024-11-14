@@ -107,8 +107,7 @@ func (db *DB) DeleteLinks(path string) error {
 	deleteLinksSQL := `
 		DELETE FROM links
 		WHERE source_id = (
-			SELECT id FROM zettels WHERE path = ? LIMIT 1
-		);
+			SELECT id FROM zettels WHERE path = ? LIMIT 1);
 	`
 	return db.executeTransaction(deleteLinksSQL, path)
 }

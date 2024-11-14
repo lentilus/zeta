@@ -75,24 +75,51 @@ func (db *DB) UpdateZettel(zettel Zettel) error {
 	)
 }
 
-// CreateLink creates a new link between two zettels in the database.
-func (db *DB) CreateLink(sourceID, targetID int) error {
+// CreateLinkByPaths creates a new link between two zettels in the database using their paths.
+func (db *DB) CreateLink(sourcePath, targetPath string) error {
 	createLinkSQL := `
 		INSERT INTO links (source_id, target_id)
-		VALUES (?, ?);
+		SELECT s.id, t.id
+		FROM zettels s
+		JOIN zettels t ON t.path = ?
+		WHERE s.path = ?;
 	`
-	return db.executeTransaction(
-		createLinkSQL,
-		sourceID,
-		targetID,
-	)
+
+	result, err := db.Conn.Exec(createLinkSQL, targetPath, sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to create link: %w", err)
+	}
+
+	// Check if the link was created by verifying affected rows
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("link creation failed: one or both paths do not exist")
+	}
+
+	return nil
 }
 
-// DeleteLinks deletes all outgoing links from a specified zettel in the database.
-func (db *DB) DeleteLinks(sourceID int) error {
+// DeleteLinks deletes all outgoing links from a specified zettel path in the database.
+func (db *DB) DeleteLinks(path string) error {
 	deleteLinksSQL := `
 		DELETE FROM links
-		WHERE source_id = ?;
+		WHERE source_id = (
+			SELECT id FROM zettels WHERE path = ? LIMIT 1);
 	`
-	return db.executeTransaction(deleteLinksSQL, sourceID)
+	return db.executeTransaction(deleteLinksSQL, path)
+}
+
+// UpsertZettel inserts a new zettel or updates it if it already exists.
+func (db *DB) UpsertZettel(zettel Zettel) error {
+	query := `
+		INSERT INTO zettels (path, checksum, last_updated)
+		VALUES (?, ?, ?)
+		ON CONFLICT(path) DO UPDATE SET
+			checksum = excluded.checksum,
+			last_updated = excluded.last_updated;
+	`
+	return db.executeTransaction(query, zettel.Path, zettel.Checksum, zettel.LastUpdated)
 }

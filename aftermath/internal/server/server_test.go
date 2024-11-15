@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"aftermath/internal/server"
+	"encoding/json"
 	"fmt"
 	"net"
 	"testing"
@@ -26,25 +27,54 @@ func connectClient(id int) {
 
 	fmt.Printf("Client %d: Connected to server\n", id)
 
-	// Simulate some interaction with the server
-	time.Sleep(3 * time.Second)
+	// Construct a sample request message
+	reqPayload := server.RequestPayload{
+		Action: "ping",
+		Args:   []string{},
+	}
 
-	// The client disconnects
-	fmt.Printf("Client %d: Disconnected\n", id)
+	msg := server.Message{
+		Type:      "request",
+		ID:        fmt.Sprintf("client-%d", id),
+		Payload:   reqPayload,
+		Timestamp: time.Now(),
+	}
+
+	// Marshal the request message to JSON
+	reqData, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Printf("Client %d: Error marshaling request: %s\n", id, err)
+		return
+	}
+
+	// Send the request to the server
+	conn.Write(append(reqData, '\n')) // Append newline to mark end of the request
+
+	// Read the response from the server
+	respBuf := make([]byte, 1024)
+	n, err := conn.Read(respBuf)
+	if err != nil {
+		fmt.Printf("Client %d: Error reading response: %s\n", id, err)
+		return
+	}
+
+	// Parse the response
+	var resp server.Message
+	err = json.Unmarshal(respBuf[:n], &resp)
+	if err != nil {
+		fmt.Printf("Client %d: Error unmarshaling response: %s\n", id, err)
+		return
+	}
+
+	// Output the response
+	fmt.Printf("Client %d: Received response: %+v\n", id, resp)
 }
 
 func TestServer(t *testing.T) {
 	startServer(t)
 
-	// Client 1 connects
 	go connectClient(1)
-
-	// Client 2 connects after 2 seconds
-	time.Sleep(1 * time.Second)
 	go connectClient(2)
-
-	// Client 3 connects after 4 seconds
-	time.Sleep(1 * time.Second)
 	go connectClient(3)
 
 	// Ugly fix to avoid race condition

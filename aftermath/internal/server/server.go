@@ -1,6 +1,9 @@
 package server
 
 import (
+	"bufio"
+	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -9,6 +12,7 @@ import (
 	"syscall"
 )
 
+// handleClient handles incoming client connections
 func handleClient(
 	conn net.Conn,
 	stopChan chan struct{},
@@ -24,15 +28,43 @@ func handleClient(
 
 	log.Printf("New client connected: %s", conn.RemoteAddr())
 
-	// Simulate interaction with the client
-	buf := make([]byte, 1024)
-	for {
-		_, err := conn.Read(buf)
-		if err != nil {
-			// When client closes connection or an error occurs
-			log.Printf("Client disconnected: %s", conn.RemoteAddr())
-			break
+	scanner := bufio.NewScanner(conn) // Use a buffered scanner for line-by-line input
+	for scanner.Scan() {
+		line := scanner.Text() // Read a full line (ending with \n)
+
+		// Skip empty lines
+		if line == "" {
+			continue
 		}
+
+		// Unmarshal the message into the Message struct
+		var msg Message
+		err := json.Unmarshal([]byte(line), &msg)
+		if err != nil {
+			log.Printf("Error unmarshalling message: %v", err)
+			continue // Skip invalid JSON
+		}
+
+		// Process the request and generate a response
+		response := handleRequest(msg)
+
+		// Send the response back to the client
+		respData, err := json.Marshal(response)
+		if err != nil {
+			log.Printf("Error marshalling response: %v", err)
+			continue
+		}
+
+		// Send the response to the client
+		_, err = conn.Write(append(respData, '\n')) // Append a newline for the client
+		if err != nil {
+			log.Printf("Error writing response to client: %v", err)
+			return
+		}
+	}
+
+	if err := scanner.Err(); err != nil && err != io.EOF {
+		log.Printf("Scanner error: %v", err)
 	}
 
 	// Decrease the client count when a client disconnects
@@ -85,6 +117,7 @@ func StartServer() {
 			log.Println("Shutdown signal received, stopping server...")
 			return
 		case <-stopChan: // All clients disconnected
+			log.Println("All clients disconnected, stopping server...")
 			return
 		default: // New connections
 			conn, err := ln.Accept()

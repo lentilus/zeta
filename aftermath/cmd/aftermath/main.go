@@ -1,17 +1,13 @@
 package main
 
 import (
+	"aftermath/internal/api"
 	"aftermath/internal/cache"
-	"aftermath/internal/database"
-	"aftermath/internal/server"
 	"flag"
-	"fmt"
-	"log"
-	"net/http"
 )
 
 func main() {
-	port := flag.Int("port", 8080, "The port on which the server will listen.")
+	_ = flag.Int("port", 8080, "The port on which the server will listen.")
 	root := flag.String("root", "/home/lentilus/typstest/", "The root of the zettel kasten.")
 	cachefile := flag.String(
 		"cache",
@@ -26,15 +22,12 @@ func main() {
 	kasten.UpdateIncremental()
 
 	// Initialize the database
-	db, err := database.NewDB(*cachefile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+	// db, err := database.NewReadonlyDB(*cachefile, 1000)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer db.Close()
 
 	// Initialize the HTTP server with database dependency
-	srv := server.NewServer(db)
-
-	log.Printf("Server running at http://localhost:%d", *port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), srv.Router()))
+	api.StartServer()
 }

@@ -44,7 +44,12 @@ func (k *Zettelkasten) UpdateIncremental() {
 
 	// Start directory walking
 	wg.Add(1)
-	go k.findUpdates(fileMetadataChan, &wg)
+	go func() {
+		err := k.findUpdates(fileMetadataChan, &wg)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	// Start metadata processing
 	wg.Add(1)
@@ -92,6 +97,7 @@ func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *syn
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 	zettels, err := db.GetAll()
 	fmt.Printf("%d zettels stored in db\n", len(zettels))
 	if err != nil {

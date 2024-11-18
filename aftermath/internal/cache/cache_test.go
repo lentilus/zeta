@@ -1,7 +1,7 @@
 package cache_test
 
 import (
-	"aftermath/pkg/cache"
+	"aftermath/internal/cache"
 	"fmt"
 	"os"
 	"runtime"

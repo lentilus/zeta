@@ -3,45 +3,62 @@ package api_test
 import (
 	"aftermath/internal/api"
 	"net"
-	"net/rpc"
 	"net/rpc/jsonrpc"
+	"sync"
 	"testing"
 	"time"
 )
 
-// TestExampleMethod tests the ExampleMethod of the Api struct
-func TestExampleMethod(t *testing.T) {
-	// Start the server in a separate goroutine
+// ExampleHandler is a mock handler used for testing
+type ExampleHandler struct{}
+
+// SayHello is a mock method
+func (h *ExampleHandler) SayHello(args *string, reply *string) error {
+	*reply = "Hello, " + *args
+	return nil
+}
+
+func TestJSONRPCServer(t *testing.T) {
+	// Initialize the server
+	handler := &ExampleHandler{}
+	server := api.NewJSONRPCServer(handler, "ExampleHandler", 1234)
+
+	// Run the server in a separate goroutine
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		api.StartServer()
+		defer wg.Done()
+		if err := server.Start(); err != nil {
+			t.Fatalf("Server failed to start: %v", err)
+		}
 	}()
+	// Give the server some time to start
+	time.Sleep(100 * time.Millisecond)
 
-	// Allow the server to start
-	time.Sleep(1 * time.Second)
-
-	// Connect to the server as a client
-	conn, err := net.Dial("tcp", "127.0.0.1:1234")
+	// Start the client to test the server
+	client, err := net.Dial("tcp", "localhost:1234")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
-	defer conn.Close()
 
 	// Create a JSON-RPC client
-	client := rpc.NewClientWithCodec(jsonrpc.NewClientCodec(conn))
+	rpcClient := jsonrpc.NewClient(client)
 
-	// Prepare request and response structures
-	params := api.ExampleParams{Name: "John"}
-	var result api.ExampleResult
+	// Prepare the request and response
+	args := "World"
+	var reply string
 
-	// Make the RPC call
-	err = client.Call("Api.ExampleMethod", &params, &result)
+	// Call the SayHello method on the server
+	err = rpcClient.Call("ExampleHandler.SayHello", &args, &reply)
 	if err != nil {
 		t.Fatalf("RPC call failed: %v", err)
 	}
 
-	// Validate the result
-	expectedMessage := "Hello, John"
-	if result.Message != expectedMessage {
-		t.Errorf("Unexpected response: got %q, want %q", result.Message, expectedMessage)
+	// Validate the response
+	expected := "Hello, World"
+	if reply != expected {
+		t.Errorf("Expected reply %q, got %q", expected, reply)
 	}
+	client.Close()
+	wg.Wait()
 }

@@ -196,6 +196,83 @@ func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
 	return nil
 }
 
+// UpdateOne processes a single Zettel file given its path.
+func (k *Zettelkasten) UpdateOne(path string) error {
+	// Check if file exists and get its info
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("error accessing file %q: %v", path, err)
+	}
+
+	// Check if it's a valid zettel file
+	if !fileNameFilter(path) {
+		return fmt.Errorf("file %q is not a valid zettel file", path)
+	}
+
+	// Create FileMetadata for the file
+	metadata := FileMetadata{
+		Path:         path,
+		LastModified: fileInfo.ModTime(),
+	}
+
+	// Get existing zettel from database if it exists
+	existingZettel, dberr := k.db.GetZettel(path)
+	if dberr != nil && dberr != database.ErrZettelNotFound {
+		return fmt.Errorf("error retrieving zettel from database: %v", dberr)
+	}
+
+	// Read file content
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("error reading file %q: %v", path, err)
+	}
+
+	// Compute checksum
+	checksum := utils.ComputeChecksum(content)
+
+	// If file hasn't changed, return early
+	if dberr != database.ErrZettelNotFound && bytes.Equal(checksum, existingZettel.Checksum) {
+		return nil
+	}
+
+	// Parse references
+	parser := parser.NewParser()
+	defer parser.CloseParser()
+
+	refs, err := parser.GetReferences(content)
+	if err != nil {
+		return fmt.Errorf("error parsing references: %v", err)
+	}
+
+	// Update zettel in database
+	err = k.db.UpsertZettel(
+		database.Zettel{
+			LastUpdated: metadata.LastModified.Unix(),
+			Path:        metadata.Path,
+			Checksum:    checksum,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error updating zettel in database: %v", err)
+	}
+
+	// Update links
+	err = k.db.DeleteLinks(path)
+	if err != nil {
+		return fmt.Errorf("error deleting old links: %v", err)
+	}
+
+	for _, ref := range refs {
+		link := ref2Link(ref, k.root)
+		err = k.db.CreateLink(path, link)
+		if err != nil {
+			return fmt.Errorf("error creating link: %v", err)
+		}
+	}
+
+	return nil
+}
+
 func ref2Link(ref string, base string) string {
 	if len(ref) < 2 {
 		return ""

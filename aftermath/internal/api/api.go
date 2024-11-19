@@ -1,6 +1,7 @@
 package api
 
 import (
+	"aftermath/internal/cache"
 	"aftermath/internal/database"
 	"aftermath/internal/scheduler"
 	"fmt"
@@ -8,12 +9,12 @@ import (
 
 type Index struct {
 	roDB *database.DB
-	rwDB *database.DB
+	zk   *cache.Zettelkasten
 	s    *scheduler.Scheduler
 }
 
-func NewIndex(roDB *database.DB, rwDB *database.DB, s *scheduler.Scheduler) Index {
-	return Index{roDB: roDB, rwDB: rwDB, s: s}
+func NewIndex(roDB *database.DB, zk *cache.Zettelkasten, s *scheduler.Scheduler) Index {
+	return Index{roDB: roDB, zk: zk, s: s}
 }
 
 type CacheParams struct {
@@ -43,5 +44,10 @@ func (c *Index) GetBackLinks(params *CacheParams, result *CacheResult) error {
 	zettels, err := c.roDB.GetBackLinks(params.Zettel)
 	result.Zettels = zettels
 	result.Error = fmt.Sprint(err)
+	return nil
+}
+
+func (c *Index) Update(params *CacheParams, result *CacheResult) error {
+	result.Error = fmt.Sprint(c.zk.UpdateOne(params.Zettel))
 	return nil
 }

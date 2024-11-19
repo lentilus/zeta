@@ -41,15 +41,14 @@ func main() {
 	defer s.StopScheduler()
 
 	// Schedule incremental updates every 5 minutes
+	zk := cache.NewZettelkasten(*root, rwDB)
 	go func() {
-		defer rwDB.Close()
-		kasten := cache.NewZettelkasten(*root, rwDB)
-		t := scheduler.Task{Name: "Incremental Cache Update", Execute: kasten.UpdateIncremental}
+		t := scheduler.Task{Name: "Incremental Cache Update", Execute: zk.UpdateIncremental}
 		s.SchedulePeriodicTask(5*time.Minute, t)
 	}()
 
 	// Initialize the JSON-RPC api
-	cacheapi := api.NewIndex(roDB, rwDB, s)
-	server := api.NewJSONRPCServer(&cacheapi, "API", *port)
+	index := api.NewIndex(roDB, zk, s)
+	server := api.NewJSONRPCServer(&index, "API", *port)
 	server.Start()
 }

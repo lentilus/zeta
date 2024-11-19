@@ -3,11 +3,13 @@ package main
 import (
 	"aftermath/internal/api"
 	"aftermath/internal/cache"
+	"aftermath/internal/database"
 	"flag"
+	"log"
 )
 
 func main() {
-	_ = flag.Int("port", 8080, "The port on which the server will listen.")
+	port := flag.Int("port", 1234, "The port on which the server will listen.")
 	root := flag.String("root", "/home/lentilus/typstest/", "The root of the zettel kasten.")
 	cachefile := flag.String(
 		"cache",
@@ -18,16 +20,24 @@ func main() {
 	flag.Parse()
 
 	// Start cache generation in the background immediately
-	kasten := cache.NewZettelkasten(*root, *cachefile)
+	db, err := database.NewDB(*cachefile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	kasten := cache.NewZettelkasten(*root, db)
 	kasten.UpdateIncremental()
 
 	// Initialize the database
-	// db, err := database.NewReadonlyDB(*cachefile, 1000)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer db.Close()
+	roDB, err := database.NewReadonlyDB(*cachefile, 1000)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer roDB.Close()
 
 	// Initialize the HTTP server with database dependency
-	api.StartServer()
+	cacheapi := api.NewCache(roDB)
+	server := api.NewJSONRPCServer(&cacheapi, "API", *port)
+	log.Fatal(server.Start())
 }

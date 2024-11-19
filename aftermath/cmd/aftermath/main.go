@@ -4,8 +4,10 @@ import (
 	"aftermath/internal/api"
 	"aftermath/internal/cache"
 	"aftermath/internal/database"
+	"aftermath/internal/scheduler"
 	"flag"
 	"log"
+	"time"
 )
 
 func main() {
@@ -19,25 +21,35 @@ func main() {
 
 	flag.Parse()
 
-	// Start cache generation in the background immediately
-	db, err := database.NewDB(*cachefile)
+	// Initialize read-write db for cache update
+	rwDB, err := database.NewDB(*cachefile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer rwDB.Close()
 
-	kasten := cache.NewZettelkasten(*root, db)
-	kasten.UpdateIncremental()
-
-	// Initialize the database
+	// Initialize read-only db for api
 	roDB, err := database.NewReadonlyDB(*cachefile, 1000)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer roDB.Close()
 
-	// Initialize the HTTP server with database dependency
-	cacheapi := api.NewCache(roDB)
+	// Create and start new scheduler
+	s := scheduler.NewScheduler(10)
+	go s.RunScheduler()
+	defer s.StopScheduler()
+
+	// Schedule incremental updates every 5 minutes
+	go func() {
+		defer rwDB.Close()
+		kasten := cache.NewZettelkasten(*root, rwDB)
+		t := scheduler.Task{Name: "Incremental Cache Update", Execute: kasten.UpdateIncremental}
+		s.SchedulePeriodicTask(5*time.Minute, t)
+	}()
+
+	// Initialize the JSON-RPC api
+	cacheapi := api.NewIndex(roDB, rwDB, s)
 	server := api.NewJSONRPCServer(&cacheapi, "API", *port)
-	log.Fatal(server.Start())
+	server.Start()
 }

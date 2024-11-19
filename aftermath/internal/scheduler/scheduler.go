@@ -8,7 +8,7 @@ import (
 
 type Task struct {
 	Name    string
-	Execute func()
+	Execute func() error
 }
 
 type Scheduler struct {

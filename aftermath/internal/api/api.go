@@ -2,15 +2,18 @@ package api
 
 import (
 	"aftermath/internal/database"
+	"aftermath/internal/scheduler"
 	"fmt"
 )
 
-type Cache struct {
-	db *database.DB
+type Index struct {
+	roDB *database.DB
+	rwDB *database.DB
+	s    *scheduler.Scheduler
 }
 
-func NewCache(db *database.DB) Cache {
-	return Cache{db: db}
+func NewIndex(roDB *database.DB, rwDB *database.DB, s *scheduler.Scheduler) Index {
+	return Index{roDB: roDB, rwDB: rwDB, s: s}
 }
 
 type CacheParams struct {
@@ -22,22 +25,22 @@ type CacheResult struct {
 	Error   string   `json:"error"`
 }
 
-func (c *Cache) GetAll(params *CacheParams, result *CacheResult) error {
-	zettels, err := c.db.GetAllZettels()
+func (c *Index) GetAll(params *CacheParams, result *CacheResult) error {
+	zettels, err := c.roDB.GetAllZettels()
 	result.Zettels = zettels
 	result.Error = fmt.Sprint(err)
 	return nil
 }
 
-func (c *Cache) GetForwardLinks(params *CacheParams, result *CacheResult) error {
-	zettels, err := c.db.GetForwardLinks(params.Zettel)
+func (c *Index) GetForwardLinks(params *CacheParams, result *CacheResult) error {
+	zettels, err := c.roDB.GetForwardLinks(params.Zettel)
 	result.Zettels = zettels
 	result.Error = fmt.Sprint(err)
 	return nil
 }
 
-func (c *Cache) GetBackLinks(params *CacheParams, result *CacheResult) error {
-	zettels, err := c.db.GetBackLinks(params.Zettel)
+func (c *Index) GetBackLinks(params *CacheParams, result *CacheResult) error {
+	zettels, err := c.roDB.GetBackLinks(params.Zettel)
 	result.Zettels = zettels
 	result.Error = fmt.Sprint(err)
 	return nil

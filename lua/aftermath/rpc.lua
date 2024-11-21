@@ -1,48 +1,25 @@
+local utils = require("aftermath.utils")
+
 local M = {}
 
--- Store the connection details
 local client = {
 	host = nil,
 	port = nil,
 	socket = nil,
 	id = 0,
 	pending_requests = {},
+	buffer = "",
 }
 
--- Initialize connection parameters
 function M.setup(host, port)
 	client.host = host or "localhost"
 	client.port = port or 1234
 end
 
--- Connect to the server
-local function connect()
-	if client.socket then
-		return
-	end
-
-	local socket = vim.loop.new_tcp()
-	local connect_success = vim.loop.tcp_connect(socket, client.host, client.port, function() end)
-
-	if not connect_success then
-		error(string.format("Failed to connect to %s:%d", client.host, client.port))
-	end
-
-	client.socket = socket
-end
-
--- Close the connection
-function M.close()
-	if client.socket then
-		client.socket:close()
-		client.socket = nil
-	end
-end
-
 -- Handle incoming responses
 local function handle_response(response)
 	local decoded = vim.json.decode(response)
-	if decoded.id then
+	if decoded and decoded.id then
 		local callback = client.pending_requests[decoded.id]
 		if callback then
 			callback(decoded.result, decoded.error)
@@ -51,45 +28,83 @@ local function handle_response(response)
 	end
 end
 
--- Read from the socket
+-- Start reading from the socket
 local function start_read()
-	local buffer = ""
+	if not client.socket then
+		error("Socket is not initialized")
+	end
 
 	client.socket:read_start(function(err, chunk)
 		if err then
-			error("Read error: " .. err)
+			vim.notify("RPC read error: " .. err, vim.log.levels.ERROR)
+			M.close()
+			return
 		end
 
 		if chunk then
-			buffer = buffer .. chunk
+			client.buffer = client.buffer .. chunk
 
-			-- Try to find complete JSON-RPC messages
-			local start, end_pos = buffer:find("\n")
+			-- Extract complete JSON-RPC messages (terminated by newline)
+			local start, finish = client.buffer:find("\n")
 			while start do
-				local message = buffer:sub(1, end_pos - 1)
-				buffer = buffer:sub(end_pos + 1)
+				local message = client.buffer:sub(1, finish - 1)
+				client.buffer = client.buffer:sub(finish + 1)
 				handle_response(message)
-				start, end_pos = buffer:find("\n")
+				start, finish = client.buffer:find("\n")
 			end
 		end
 	end)
 end
 
+-- Connect to the server
+function M.connect()
+	if client.socket then
+		return
+	end
+
+	local socket = vim.loop.new_tcp()
+	socket:connect(client.host, client.port, function(err)
+		if err then
+			local msg = string.format("Failed to connect to %s:%d: %s", client.host, client.port, err)
+			utils.error(msg)
+		else
+			utils.info("Server connected.")
+		end
+
+		client.socket = socket
+		start_read()
+	end)
+end
+
+-- Close the connection
+function M.close()
+	if client.socket then
+		client.socket:read_stop()
+		client.socket:close()
+		client.socket = nil
+		client.buffer = ""
+		client.pending_requests = {}
+	end
+end
+
+-- Reconnect to the server
+function M.reconnect(host, port)
+	M.close()
+	M.setup(host, port)
+	M.connect()
+end
+
 -- Send a request and wait for response
 function M.request(method, params)
 	if not client.socket then
-		connect()
-		start_read()
+		M.connect()
 	end
 
 	client.id = client.id + 1
 	local current_id = client.id
 
-	-- Format the method name to match Go's expectations
-	local full_method = "Api." .. method
-
 	local request = {
-		method = full_method,
+		method = method,
 		params = { params }, -- Wrap params in array as Go expects
 		id = current_id,
 	}
@@ -106,29 +121,26 @@ function M.request(method, params)
 	-- Send the request
 	local success = client.socket:write(vim.json.encode(request) .. "\n")
 	if not success then
-		error("Failed to send request")
+		utils.error("Failed to send request")
 	end
 
 	-- Wait for response using vim.wait()
-	vim.wait(5000, function()
+	local timeout = 500
+	vim.wait(timeout, function()
 		return response ~= nil or error_response ~= nil
-	end)
+	end, 10)
+
+	-- Check for timeout
+	if not response and not error_response then
+		client.pending_requests[current_id] = nil -- Cleanup
+		utils.error(string.format("Request timed out after %dms", timeout))
+	end
 
 	if error_response ~= vim.NIL then
-		error(string.format("RPC error: %s", vim.inspect(error_response)))
+		utils.error(string.format("RPC error: %s", vim.inspect(error_response)))
 	end
 
 	return response
 end
 
--- Testing
-local rpc = M
-
-rpc.setup("127.0.0.1", 1234)
-
-local result1 = rpc.request("ExampleMethod", { name = "John" })
-local result2 = rpc.request("ExampleMethod", { name = "Joe" })
-local result3 = rpc.request("ExampleMethod", { name = "Foo" })
-print(vim.inspect(result1))
-print(vim.inspect(result2))
-print(vim.inspect(result3))
+return M

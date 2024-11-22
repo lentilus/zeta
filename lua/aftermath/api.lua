@@ -33,7 +33,7 @@ M.update = function(filepath)
 	return request("Update", { zettel = vim.loop.fs_realpath(filepath) })
 end
 
-M.getall = function()
+M.get_index = function()
 	return request("GetAll", {})
 end
 

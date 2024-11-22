@@ -25,7 +25,7 @@ local function index(opts)
 		.new(opts, {
 			prompt_title = "All",
 			finder = finders.new_table({
-				results = api.getall(),
+				results = api.get_index(),
 				entry_maker = entries,
 			}),
 			sorter = require("telescope.config").values.generic_sorter(opts),

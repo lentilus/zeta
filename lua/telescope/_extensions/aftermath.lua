@@ -19,16 +19,20 @@ local function entries(entry)
 	}
 end
 
+local sorter = function(opts)
+	require("telescope.config").values.generic_sorter(opts)
+end
+
 local function index(opts)
 	opts = opts or {}
 	pickers
 		.new(opts, {
-			prompt_title = "All",
+			prompt_title = "Index",
 			finder = finders.new_table({
 				results = api.get_index(),
 				entry_maker = entries,
 			}),
-			sorter = require("telescope.config").values.generic_sorter(opts),
+			sorter = sorter(opts),
 		})
 		:find()
 end
@@ -43,7 +47,7 @@ local function children(opts)
 				results = api.get_children(file),
 				entry_maker = entries,
 			}),
-			sorter = require("telescope.config").values.generic_sorter(opts),
+			sorter = sorter(opts),
 		})
 		:find()
 end
@@ -58,7 +62,7 @@ local function parents(opts)
 				results = api.get_parents(file),
 				entry_maker = entries,
 			}),
-			sorter = require("telescope.config").values.generic_sorter(opts),
+			sorter = sorter(opts),
 		})
 		:find()
 end

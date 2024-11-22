@@ -1,7 +1,7 @@
 package scheduler
 
 import (
-	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -36,13 +36,13 @@ func (s *Scheduler) RunScheduler() {
 					// Channel closed, exit the loop
 					return
 				}
-				fmt.Printf("Executing %s task...\n", task.Name)
+				log.Printf("Executing %s task...\n", task.Name)
 				task.Execute()
 				s.wg.Done() // Mark the task as completed
 			case <-s.stopChan:
 				// Stop signal received, drain the taskQueue and exit
 				for task := range s.taskQueue {
-					fmt.Printf("Draining task: %s\n", task.Name)
+					log.Printf("Draining task: %s\n", task.Name)
 					task.Execute()
 					s.wg.Done()
 				}
@@ -69,10 +69,10 @@ func (s *Scheduler) SchedulePeriodicTask(interval time.Duration, lowTask Task) {
 			s.lowPriorityLock.Lock()
 			select {
 			case s.taskQueue <- lowTask:
-				fmt.Println("Scheduled low-priority task.")
+				log.Printf("Scheduled %s.", lowTask.Name)
 				s.wg.Add(1) // Add to wait group for the low-priority task
 			default:
-				fmt.Println("Skipped scheduling low-priority task due to full queue.")
+				log.Printf("Skipped scheduling %s. Queue is full.", lowTask.Name)
 			}
 			s.lowPriorityLock.Unlock()
 		case <-s.stopChan:
@@ -90,9 +90,9 @@ func (s *Scheduler) ScheduleHighPriorityTask(task Task) {
 
 // StopScheduler waits for all tasks to complete and stops the scheduler
 func (s *Scheduler) StopScheduler() {
-	fmt.Println("Stopping scheduler...")
+	log.Println("Stopping scheduler.")
 	close(s.stopChan)  // Signal the scheduler to stop
 	close(s.taskQueue) // Close the task queue to prevent further submissions
 	s.wg.Wait()        // Wait for all tasks to complete
-	fmt.Println("Scheduler stopped.")
+	log.Println("Scheduler stopped.")
 }

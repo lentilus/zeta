@@ -60,7 +60,6 @@ func (s *Scheduler) SchedulePeriodicTask(interval time.Duration, lowTask Task) {
 	// Run the task on startup
 	s.lowPriorityLock.Lock()
 	lowTask.Execute()
-	s.wg.Add(1) // Add to wait group for the low-priority task
 	s.lowPriorityLock.Unlock()
 
 	for {

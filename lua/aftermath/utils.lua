@@ -61,4 +61,9 @@ M.path2zettel = function(filepath)
 	return relative
 end
 
+M.current_file = function()
+	-- get the file_name from the current buffer
+	return vim.api.nvim_buf_get_name(0)
+end
+
 return M

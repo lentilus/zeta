@@ -6,8 +6,8 @@ local M = {}
 
 local function request(func, args)
 	local res = rpc.request("API." .. func, args)
-	if not res then
-		error("No response")
+	if not res or res == vim.NIL then
+		error("No response. Invalid endpoint?")
 	end
 	if res.error and res.error ~= "<nil>" then
 		error(res.error)
@@ -34,7 +34,15 @@ M.update = function(filepath)
 end
 
 M.getall = function()
-	return request("GetAll", { zettel = "foo" })
+	return request("GetAll", {})
+end
+
+M.get_children = function(filename)
+	return request("GetForwardLinks", { zettel = filename })
+end
+
+M.get_parents = function(filename)
+	return request("GetBackLinks", { zettel = filename })
 end
 
 return M

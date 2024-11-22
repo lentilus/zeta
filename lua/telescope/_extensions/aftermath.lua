@@ -1,4 +1,4 @@
-local am = require("aftermath.api")
+local api = require("aftermath.api")
 local utils = require("aftermath.utils")
 
 local has_telescope, telescope = pcall(require, "telescope")
@@ -10,22 +10,53 @@ end
 local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 
+local function entries(entry)
+	local name = utils.path2zettel(entry)
+	return {
+		value = entry,
+		display = name,
+		ordinal = name,
+	}
+end
+
 local function index(opts)
 	opts = opts or {}
-
 	pickers
 		.new(opts, {
 			prompt_title = "All",
 			finder = finders.new_table({
-				results = am.getall(),
-				entry_maker = function(entry)
-					local name = utils.path2zettel(entry)
-					return {
-						value = entry,
-						display = name,
-						ordinal = name,
-					}
-				end,
+				results = api.getall(),
+				entry_maker = entries,
+			}),
+			sorter = require("telescope.config").values.generic_sorter(opts),
+		})
+		:find()
+end
+
+local function children(opts)
+	opts = opts or {}
+	local file = utils.current_file()
+	pickers
+		.new(opts, {
+			prompt_title = "Children",
+			finder = finders.new_table({
+				results = api.get_children(file),
+				entry_maker = entries,
+			}),
+			sorter = require("telescope.config").values.generic_sorter(opts),
+		})
+		:find()
+end
+
+local function parents(opts)
+	opts = opts or {}
+	local file = utils.current_file()
+	pickers
+		.new(opts, {
+			prompt_title = "Parents",
+			finder = finders.new_table({
+				results = api.get_parents(file),
+				entry_maker = entries,
 			}),
 			sorter = require("telescope.config").values.generic_sorter(opts),
 		})
@@ -35,5 +66,7 @@ end
 return telescope.register_extension({
 	exports = {
 		index = index,
+		children = children,
+		parents = parents,
 	},
 })

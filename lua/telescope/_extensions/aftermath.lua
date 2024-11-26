@@ -20,7 +20,7 @@ local function entries(entry)
 end
 
 local sorter = function(opts)
-	require("telescope.config").values.generic_sorter(opts)
+	return require("telescope.config").values.generic_sorter(opts)
 end
 
 local function index(opts)

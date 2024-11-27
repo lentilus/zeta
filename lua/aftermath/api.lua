@@ -7,6 +7,7 @@ local M = {}
 local function request(func, args)
 	local res = rpc.request("API." .. func, args)
 	if not res or res == vim.NIL then
+		print(vim.inspect(res))
 		error("No response. Invalid endpoint?")
 	end
 	if res.error and res.error ~= "<nil>" then
@@ -17,7 +18,7 @@ end
 
 M.setup = function()
 	rpc.setup("127.0.0.1", state.get_port())
-	rpc.connect()
+	rpc.connect(true)
 end
 
 M.switch = function(path, port)
@@ -34,7 +35,7 @@ M.update = function(filepath)
 end
 
 M.get_index = function()
-	return request("GetAll", {})
+	return request("GetAll", { zettel = "dummy" })
 end
 
 M.get_children = function(filename)

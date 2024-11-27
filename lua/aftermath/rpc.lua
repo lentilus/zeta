@@ -1,4 +1,5 @@
 local utils = require("aftermath.utils")
+local server = require("aftermath.server")
 
 local M = {}
 
@@ -57,16 +58,25 @@ local function start_read()
 end
 
 -- Connect to the server
-function M.connect()
-	if client.socket then
-		return
-	end
+function M.connect(startup)
+	startup = startup or false
+
+	-- if client.socket then
+	-- 	return
+	-- end
 
 	local socket = vim.loop.new_tcp()
 	socket:connect(client.host, client.port, function(err)
 		if err then
-			local msg = string.format("Failed to connect to %s:%d: %s", client.host, client.port, err)
-			utils.error(msg)
+			if startup then
+				-- start backend server
+				server.start()
+				-- connect to it
+				vim.defer_fn(M.connect, 20)
+			else
+				local msg = string.format("Failed to connect to %s:%d: %s", client.host, client.port, err)
+				utils.error(msg)
+			end
 		else
 			utils.info("Server connected.")
 		end

@@ -24,12 +24,12 @@ type ZettelUpdate struct {
 }
 
 type Zettelkasten struct {
-	root  string
-	cache string
+	root string
+	db   *database.DB
 }
 
-func NewZettelkasten(root string, cache string) *Zettelkasten {
-	return &Zettelkasten{root: root, cache: cache}
+func NewZettelkasten(root string, db *database.DB) *Zettelkasten {
+	return &Zettelkasten{root: root, db: db}
 }
 
 // fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
@@ -38,13 +38,17 @@ func fileNameFilter(name string) bool {
 }
 
 // UpdateIncremental is the main function to set up the directory walking and processing routines.
-func (k *Zettelkasten) UpdateIncremental() {
+func (k *Zettelkasten) UpdateIncremental() error {
 	fileMetadataChan := make(chan FileMetadata, 10000)
 	var wg sync.WaitGroup
 
 	// Start directory walking
 	wg.Add(1)
-	go k.findUpdates(fileMetadataChan, &wg)
+	go func() {
+		if err := k.findUpdates(fileMetadataChan, &wg); err != nil {
+			fmt.Printf("Error finding updates: %v\n", err)
+		}
+	}()
 
 	// Start metadata processing
 	wg.Add(1)
@@ -55,13 +59,13 @@ func (k *Zettelkasten) UpdateIncremental() {
 
 	// Wait for all goroutines to finish
 	wg.Wait()
+	return nil
 }
 
 // walkDirectory walks through the directory, sending file metadata to a channel.
 func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Walk the directory and process each file.
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("error accessing path %q: %v\n", path, err)
@@ -71,7 +75,6 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 		if !fileNameFilter(path) {
 			return nil
 		}
-		// If it is a file, send its metadata to the channel.
 		fileMetadataChan <- FileMetadata{
 			Path:         path,
 			LastModified: info.ModTime(),
@@ -88,20 +91,17 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
-	db, err := database.NewDB(k.cache)
+	zettels, err := k.db.GetAll()
 	if err != nil {
 		return err
 	}
-	zettels, err := db.GetAll()
 	fmt.Printf("%d zettels stored in db\n", len(zettels))
-	if err != nil {
-		return err
-	}
+
 	processorChan := make(chan ZettelUpdate, 10000)
 
 	var processWg sync.WaitGroup
 	processWg.Add(1)
-	go k.processUpdates(db, processorChan, &processWg)
+	go k.processUpdates(processorChan, &processWg)
 
 	for metadata := range fileMetadataChan {
 		z, exists := zettels[metadata.Path]
@@ -123,14 +123,13 @@ func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *syn
 	for _, z := range zettels {
 		ids = append(ids, z.ID)
 	}
-	db.DeleteZettels(ids)
+	k.db.DeleteZettels(ids)
 
 	processWg.Wait()
 	return nil
 }
 
 func (k *Zettelkasten) processUpdates(
-	db *database.DB,
 	updateChan <-chan ZettelUpdate,
 	wg *sync.WaitGroup,
 ) {
@@ -144,21 +143,18 @@ func (k *Zettelkasten) processUpdates(
 		z := u.zettel
 		m := u.metadata
 
-		// Read file content
 		content, err := os.ReadFile(m.Path)
 		if err != nil {
 			fmt.Println("Error:", err)
 			continue
 		}
 
-		// Compare Checksums
 		checksum := utils.ComputeChecksum(content)
 		if bytes.Equal(checksum, z.Checksum) {
 			fmt.Println("Nothing to do")
 			continue
 		}
 
-		// Get references
 		refs, err := parser.GetReferences(content)
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -166,7 +162,7 @@ func (k *Zettelkasten) processUpdates(
 			newLinks[m.Path] = refs
 		}
 
-		err = db.UpsertZettel(
+		err = k.db.UpsertZettel(
 			database.Zettel{
 				LastUpdated: m.LastModified.Unix(),
 				Path:        m.Path,
@@ -177,27 +173,103 @@ func (k *Zettelkasten) processUpdates(
 			fmt.Println(err)
 		}
 	}
-	err := k.updateLinks(db, newLinks)
+	err := k.updateLinks(newLinks)
 	if err != nil {
 		fmt.Println(err)
 	}
-
 }
 
-func (k *Zettelkasten) updateLinks(db *database.DB, newLinks map[string][]string) error {
+func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
 	for z, refs := range newLinks {
-		err := db.DeleteLinks(z)
+		err := k.db.DeleteLinks(z)
 		if err != nil {
 			return err
 		}
 		for _, ref := range refs {
 			link := ref2Link(ref, k.root)
-			err = db.CreateLink(z, link)
+			err = k.db.CreateLink(z, link)
 			if err != nil {
 				return err
 			}
 		}
 	}
+	return nil
+}
+
+// UpdateOne processes a single Zettel file given its path.
+func (k *Zettelkasten) UpdateOne(path string) error {
+	// Check if file exists and get its info
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("error accessing file %q: %v", path, err)
+	}
+
+	// Check if it's a valid zettel file
+	if !fileNameFilter(path) {
+		return fmt.Errorf("file %q is not a valid zettel file", path)
+	}
+
+	// Create FileMetadata for the file
+	metadata := FileMetadata{
+		Path:         path,
+		LastModified: fileInfo.ModTime(),
+	}
+
+	// Get existing zettel from database if it exists
+	existingZettel, dberr := k.db.GetZettel(path)
+	if dberr != nil && dberr != database.ErrZettelNotFound {
+		return fmt.Errorf("error retrieving zettel from database: %v", dberr)
+	}
+
+	// Read file content
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("error reading file %q: %v", path, err)
+	}
+
+	// Compute checksum
+	checksum := utils.ComputeChecksum(content)
+
+	// If file hasn't changed, return early
+	if dberr != database.ErrZettelNotFound && bytes.Equal(checksum, existingZettel.Checksum) {
+		return nil
+	}
+
+	// Parse references
+	parser := parser.NewParser()
+	defer parser.CloseParser()
+
+	refs, err := parser.GetReferences(content)
+	if err != nil {
+		return fmt.Errorf("error parsing references: %v", err)
+	}
+
+	// Update zettel in database
+	err = k.db.UpsertZettel(
+		database.Zettel{
+			LastUpdated: metadata.LastModified.Unix(),
+			Path:        metadata.Path,
+			Checksum:    checksum,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error updating zettel in database: %v", err)
+	}
+
+	// Update links
+	err = k.db.DeleteLinks(path)
+	if err != nil {
+		return fmt.Errorf("error deleting old links: %v", err)
+	}
+
+	for _, ref := range refs {
+		link := ref2Link(ref, k.root)
+		err = k.db.CreateLink(path, link)
+		if err != nil {
+			return fmt.Errorf("error creating link: %v", err)
+		}
+	}
+
 	return nil
 }
 

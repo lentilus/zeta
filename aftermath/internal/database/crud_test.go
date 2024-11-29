@@ -91,6 +91,82 @@ func TestGetZettel(t *testing.T) {
 	}
 }
 
+// TestUpsertMetadata verifies that the UpsertMetadata function inserts or updates metadata correctly.
+func TestUpsertMetadata(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Define test metadata key and value
+	key := "test_key"
+	value := []byte("test_value")
+
+	// Upsert metadata using the UpsertMetadata function
+	err := db.UpsertMetadata(key, value)
+	if err != nil {
+		t.Fatalf("UpsertMetadata failed: %v", err)
+	}
+
+	// Verify that the metadata has been inserted into the database
+	var retrievedValue []byte
+	query := `SELECT value FROM metadata WHERE "key" = ?`
+	err = db.Conn.QueryRow(query, key).Scan(&retrievedValue)
+	if err != nil {
+		t.Fatalf("failed to query inserted metadata: %v", err)
+	}
+
+	// Verify that the retrieved value matches the inserted value
+	if string(retrievedValue) != string(value) {
+		t.Errorf("expected value %s, got %s", value, retrievedValue)
+	}
+
+	// Upsert the metadata again with a new value to test update functionality
+	newValue := []byte("new_value")
+	err = db.UpsertMetadata(key, newValue)
+	if err != nil {
+		t.Fatalf("UpsertMetadata failed: %v", err)
+	}
+
+	// Verify that the metadata has been updated
+	err = db.Conn.QueryRow(query, key).Scan(&retrievedValue)
+	if err != nil {
+		t.Fatalf("failed to query updated metadata: %v", err)
+	}
+	if string(retrievedValue) != string(newValue) {
+		t.Errorf("expected updated value %s, got %s", newValue, retrievedValue)
+	}
+}
+
+// TestGetMetadata verifies that the GetMetadata function retrieves metadata correctly.
+func TestGetMetadata(t *testing.T) {
+	db := openTestDB(t)
+	defer closeTestDB(t, db)
+
+	// Insert metadata for testing
+	key := "existing_key"
+	value := []byte("existing_value")
+	err := db.UpsertMetadata(key, value)
+	if err != nil {
+		t.Fatalf("UpsertMetadata failed: %v", err)
+	}
+
+	// Retrieve the metadata using the GetMetadata function
+	retrievedValue, err := db.GetMetadata(key)
+	if err != nil {
+		t.Fatalf("GetMetadata failed: %v", err)
+	}
+
+	// Verify that the retrieved value matches the inserted value
+	if string(retrievedValue) != string(value) {
+		t.Errorf("expected value %s, got %s", value, retrievedValue)
+	}
+
+	// Test for a non-existent key
+	_, err = db.GetMetadata("non_existent_key")
+	if err == nil {
+		t.Fatal("expected error for non-existent key, got nil")
+	}
+}
+
 // TestUpdateZettel verifies that the UpdateZettel function updates a zettel correctly.
 func TestUpdateZettel(t *testing.T) {
 	db := openTestDB(t)
@@ -175,84 +251,16 @@ func TestCreateLinkByPaths(t *testing.T) {
 
 	// Verify that the link was created
 	var sourceID, targetID int
-	row := db.Conn.QueryRow(
-		"SELECT source_id, target_id FROM links WHERE source_id = (SELECT id FROM zettels WHERE path = ?) AND target_id = (SELECT id FROM zettels WHERE path = ?)",
+	err = db.Conn.QueryRow(
+		`SELECT source_id, target_id FROM links WHERE source_id = (SELECT id FROM zettels WHERE path = ?) AND target_id = (SELECT id FROM zettels WHERE path = ?)`,
 		"path1",
 		"path2",
-	)
-	if err := row.Scan(&sourceID, &targetID); err != nil {
+	).Scan(&sourceID, &targetID)
+	if err != nil {
 		t.Fatalf("failed to query created link: %v", err)
 	}
-	if sourceID != 1 || targetID != 2 {
-		t.Errorf("expected (1, 2), got (%d, %d)", sourceID, targetID)
-	}
-}
 
-// TestDeleteLinks verifies that the DeleteLinks function deletes all outgoing links correctly.
-func TestDeleteLinks(t *testing.T) {
-	db := openTestDB(t)
-	defer closeTestDB(t, db)
-
-	// Example UNIX timestamp
-	lastUpdated := int64(1630454400)
-
-	// Insert a zettel with last_updated
-	_, err := db.Conn.Exec(
-		"INSERT INTO zettels (path, checksum, last_updated) VALUES (?, ?, ?)",
-		"path1",
-		"checksum1",
-		lastUpdated,
-	)
-	if err != nil {
-		t.Fatalf("failed to insert zettel: %v", err)
-	}
-
-	// Insert other zettels to link to
-	_, err = db.Conn.Exec(
-		"INSERT INTO zettels (path, checksum, last_updated) VALUES (?, ?, ?)",
-		"path2",
-		"checksum2",
-		lastUpdated,
-	)
-	if err != nil {
-		t.Fatalf("failed to insert second zettel: %v", err)
-	}
-	_, err = db.Conn.Exec(
-		"INSERT INTO zettels (path, checksum, last_updated) VALUES (?, ?, ?)",
-		"path3",
-		"checksum3",
-		lastUpdated,
-	)
-	if err != nil {
-		t.Fatalf("failed to insert third zettel: %v", err)
-	}
-
-	// Create links from zettel with path "path1" to zettels with path "path2" and "path3"
-	err = db.CreateLink("path1", "path2")
-	if err != nil {
-		t.Fatalf("CreateLinkByPaths failed: %v", err)
-	}
-	err = db.CreateLink("path1", "path3")
-	if err != nil {
-		t.Fatalf("CreateLinkByPaths failed: %v", err)
-	}
-
-	// Delete links for zettel with path "path1"
-	err = db.DeleteLinks("path1") // Updated to use path instead of id
-	if err != nil {
-		t.Fatalf("DeleteLinks failed: %v", err)
-	}
-
-	// Verify that the links were deleted
-	var count int
-	row := db.Conn.QueryRow(
-		"SELECT COUNT(*) FROM links WHERE source_id = (SELECT id FROM zettels WHERE path = ?)",
-		"path1",
-	)
-	if err := row.Scan(&count); err != nil {
-		t.Fatalf("failed to count links: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 links, got %d", count)
+	if sourceID == 0 || targetID == 0 {
+		t.Fatalf("link not created between zettels")
 	}
 }

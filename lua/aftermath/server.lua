@@ -15,15 +15,16 @@ local run_external = function(args_table)
 end
 
 M.start = function()
-	local zk_root = state.get_path()
 	local cmd = {
-		"/home/lentilus/git/aftermath.nvim.git/lua/bin/aftermath",
+		"/home/lentilus/git/aftermath.nvim.git/dev/bin/aftermath",
 		"--port",
-		"1234",
+		state.get_port(),
 		"--root",
-		zk_root,
+		state.get_path(),
 		"--cache",
-		"/home/lentilus/typstest/lulu.sqlite",
+		state.get_path() .. "/.state/index.sqlite",
+		"--bib",
+		state.get_path() .. "/.state/index.yaml",
 	}
 	-- Call the helper function with the program and flags
 	run_external(cmd)

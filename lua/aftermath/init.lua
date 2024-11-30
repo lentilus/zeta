@@ -21,16 +21,15 @@ local function register_hooks()
 	})
 end
 
-M.setup = function(initial_path, initial_port)
+M.setup = function(initial_path)
 	initial_path = initial_path or "/home/lentilus/typstest"
-	initial_port = initial_port or 1234
-	state.setup(initial_path, initial_port)
+	state.setup(initial_path)
 	api.setup()
 	register_hooks()
 end
 
-M.switch_zettelkasten = function(new_path, new_port)
-	state.switch(new_path, new_port)
+M.switch_zettelkasten = function(new_path)
+	state.switch(new_path)
 	api.switch()
 	register_hooks() -- Clear old hooks and register new ones
 end

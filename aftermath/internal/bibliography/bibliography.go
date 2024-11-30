@@ -2,7 +2,9 @@ package bibliography
 
 import (
 	"aftermath/internal/database"
+	"aftermath/internal/utils"
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -14,18 +16,20 @@ type Bibliography struct {
 }
 
 // Zettel2Entry converts a Zettel to a yaml entry.
-func Zettel2Yaml(z database.Zettel) string {
+func Zettel2Yaml(z database.Zettel, root string) string {
+	target, _ := utils.Path2Target(z.Path, root)
 	template := `"%s":
   type: Misc
   title: "%s"
   path: "%s"
   id: %s
 `
-	return fmt.Sprintf(template, z.Path, "Zettel: "+z.Path, z.Path, fmt.Sprint(z.ID))
+	return fmt.Sprintf(template, target, target, z.Path, fmt.Sprint(z.ID))
 }
 
 // Regenerate writes the entire bibliography to the YAML file.
-func (b *Bibliography) Regenerate() error {
+func (b *Bibliography) Regenerate(root string) error {
+	log.Println("Regenerating Bibliography")
 	zettels, err := b.DB.GetAllSorted()
 	if err != nil {
 		return err
@@ -33,7 +37,7 @@ func (b *Bibliography) Regenerate() error {
 
 	yamlData := ``
 	for _, z := range zettels {
-		yamlData += Zettel2Yaml(z)
+		yamlData += Zettel2Yaml(z, root)
 	}
 
 	return os.WriteFile(b.Path, []byte(yamlData), 0644)

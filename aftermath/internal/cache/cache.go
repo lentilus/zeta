@@ -6,6 +6,7 @@ import (
 	"aftermath/internal/utils"
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -95,8 +96,6 @@ func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *syn
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%d zettels stored in db\n", len(zettels))
-
 	processorChan := make(chan ZettelUpdate, 10000)
 
 	var processWg sync.WaitGroup
@@ -120,6 +119,7 @@ func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *syn
 
 	// Delete all zettels left in zettels (the deleted ones) from DB
 	var ids []int
+	log.Printf("Deleting %d zettels from cache.", len(zettels))
 	for _, z := range zettels {
 		ids = append(ids, z.ID)
 	}
@@ -138,6 +138,7 @@ func (k *Zettelkasten) processUpdates(
 	defer parser.CloseParser()
 
 	newLinks := make(map[string][]string)
+	updatedCount := 0
 
 	for u := range updateChan {
 		z := u.zettel
@@ -171,11 +172,19 @@ func (k *Zettelkasten) processUpdates(
 		)
 		if err != nil {
 			fmt.Println(err)
+		} else {
+			updatedCount++
 		}
 	}
 	err := k.updateLinks(newLinks)
 	if err != nil {
 		fmt.Println(err)
+	}
+
+	if updatedCount > 0 {
+		log.Printf("Upserted %d zettels", updatedCount)
+	} else {
+		log.Println("No upserts.")
 	}
 }
 
@@ -269,6 +278,8 @@ func (k *Zettelkasten) UpdateOne(path string) error {
 			return fmt.Errorf("error creating link: %v", err)
 		}
 	}
+
+	log.Println("Upserted 1 zettel.")
 
 	return nil
 }

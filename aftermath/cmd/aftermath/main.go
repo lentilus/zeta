@@ -2,6 +2,7 @@ package main
 
 import (
 	"aftermath/internal/api"
+	"aftermath/internal/bibliography"
 	"aftermath/internal/cache"
 	"aftermath/internal/database"
 	"aftermath/internal/scheduler"
@@ -15,7 +16,12 @@ func main() {
 	root := flag.String("root", "/home/lentilus/typstest/", "The root of the zettel kasten.")
 	cachefile := flag.String(
 		"cache",
-		"/home/lentilus/typstest/lul.sqlite",
+		"/home/lentilus/typstest/.state/index.sqlite",
+		"The full path to the sqlite cache.",
+	)
+	bibfile := flag.String(
+		"bib",
+		"/home/lentilus/typstest/.state/index.yaml",
 		"The full path to the sqlite cache.",
 	)
 
@@ -40,8 +46,14 @@ func main() {
 	go s.RunScheduler()
 	defer s.StopScheduler()
 
+	b := &bibliography.Bibliography{
+		Path:     *bibfile,
+		DB:       rwDB,
+		Checksum: []byte{},
+	}
+
 	// Schedule incremental updates every 5 minutes
-	zk := cache.NewZettelkasten(*root, rwDB)
+	zk := cache.NewZettelkasten(*root, rwDB, b)
 	go func() {
 		t := scheduler.Task{Name: "Incremental Cache Update", Execute: zk.UpdateIncremental}
 		s.SchedulePeriodicTask(5*time.Minute, t)

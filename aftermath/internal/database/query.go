@@ -40,6 +40,33 @@ func (db *DB) GetAll() (map[string]Zettel, error) {
 	return zettelMap, nil
 }
 
+// GetAllByID loads all zettels from the database and stores them in a map keyed by id for fast retrieval.
+func (db *DB) GetAllByID() (map[int]Zettel, error) {
+	query := `SELECT id, path, checksum, last_updated FROM zettels`
+
+	rows, err := db.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve zettels: %w", err)
+	}
+	defer rows.Close()
+
+	zettelMap := make(map[int]Zettel)
+	for rows.Next() {
+		var z Zettel
+		if err := rows.Scan(&z.ID, &z.Path, &z.Checksum, &z.LastUpdated); err != nil {
+			return nil, fmt.Errorf("failed to scan zettel: %w", err)
+		}
+		// Use z.ID as the key for quick lookup by id
+		zettelMap[z.ID] = z
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
+	}
+
+	return zettelMap, nil
+}
+
 // DeleteZettels deletes zettels from the database based on a list of IDs.
 func (db *DB) DeleteZettels(ids []int) error {
 	if len(ids) == 0 {

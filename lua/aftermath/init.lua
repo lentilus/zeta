@@ -30,7 +30,8 @@ M.setup = function(initial_path, initial_port)
 end
 
 M.switch_zettelkasten = function(new_path, new_port)
-	api.switch(new_path, new_port)
+	state.switch(new_path, new_port)
+	api.switch()
 	register_hooks() -- Clear old hooks and register new ones
 end
 

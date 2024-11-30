@@ -21,8 +21,7 @@ M.setup = function()
 	rpc.connect(true)
 end
 
-M.switch = function(path, port)
-	state.switch(path, port)
+M.switch = function()
 	rpc.reconnect("127.0.0.1", state.get_port())
 end
 

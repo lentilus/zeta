@@ -50,3 +50,56 @@ func TestReference2Path(t *testing.T) {
 		})
 	}
 }
+
+// TestPath2Target tests the Path2Target function
+func TestPath2Target(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		base     string
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "simple case",
+			path:     "/home/user/project/file1.typ",
+			base:     "/home/user/project",
+			expected: "file1",
+			wantErr:  false,
+		},
+		{
+			name:     "nested case",
+			path:     "/home/user/project/subdir/file2.typ",
+			base:     "/home/user/project",
+			expected: "subdir.file2",
+			wantErr:  false,
+		},
+		{
+			name:     "path without .typ suffix",
+			path:     "/home/user/project/file4",
+			base:     "/home/user/project",
+			expected: "file4",
+			wantErr:  false,
+		},
+		{
+			name:     "empty path",
+			path:     "",
+			base:     "/home/user/project",
+			expected: "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := utils.Path2Target(tt.path, tt.base)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Path2Target() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("Path2Target() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

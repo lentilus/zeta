@@ -29,6 +29,28 @@ func NewDB(dbPath string) (*DB, error) {
 	return db, nil
 }
 
+// NewReadonlyDB initializes a new SQLite database connection in read-only mode
+// with a specified timeout, and returns a DB struct with the connection.
+func NewReadonlyDB(dbPath string, timeoutMs int) (*DB, error) {
+	// Open the SQLite database in read-only mode with a timeout
+	connStr := fmt.Sprintf("file:%s?mode=ro&_timeout=%d", dbPath, timeoutMs)
+	conn, err := sql.Open("sqlite3", connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open SQLite database in read-only mode: %w", err)
+	}
+
+	// Initialize the DB struct
+	db := &DB{Conn: conn}
+
+	// Verify the connection is valid (e.g., can query)
+	if err := conn.Ping(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to connect to SQLite database in read-only mode: %w", err)
+	}
+
+	return db, nil
+}
+
 // setup checks the schema version, creates tables if they don’t exist, and runs migrations if needed
 func (db *DB) setup() error {
 	tx, err := db.Conn.Begin()

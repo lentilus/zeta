@@ -38,8 +38,8 @@ func TestRegenerate(t *testing.T) {
 
 	// Insert test zettels into the database.
 	zettels := []database.Zettel{
-		{Path: "path1", Checksum: []byte("checksum1"), LastUpdated: 1630454400, ID: 1},
-		{Path: "path2", Checksum: []byte("checksum2"), LastUpdated: 1630454401, ID: 2},
+		{Path: "/path1", Checksum: []byte("checksum1"), LastUpdated: 1630454400, ID: 1},
+		{Path: "/path2", Checksum: []byte("checksum2"), LastUpdated: 1630454401, ID: 2},
 	}
 	for _, z := range zettels {
 		if err := db.CreateZettel(z); err != nil {
@@ -54,7 +54,7 @@ func TestRegenerate(t *testing.T) {
 	}
 
 	// Call the Regenerate method to generate the YAML file.
-	err = bib.Regenerate()
+	err = bib.Regenerate("/")
 	if err != nil {
 		t.Fatalf("Regenerate failed: %v", err)
 	}
@@ -68,12 +68,12 @@ func TestRegenerate(t *testing.T) {
 	// Verify the contents of the YAML file.
 	expectedYaml := `"path1":
   type: Misc
-  title: "Zettel: path1"
+  title: "path1"
   path: "path1"
   id: 1
 "path2":
   type: Misc
-  title: "Zettel: path2"
+  title: "path2"
   path: "path2"
   id: 2
 `

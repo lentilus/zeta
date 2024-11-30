@@ -1,3 +1,5 @@
+local bit = require("bit")
+
 local M = {}
 
 local state = {
@@ -12,8 +14,8 @@ local hash_filepath_to_port = function(filepath)
 
 	for i = 1, #filepath do
 		local byte = filepath:byte(i)
-		hash = hash ~ byte
-		hash = (hash * fnv_prime) % 2 ^ 32
+		hash = bit.bxor(hash, byte) -- Use bit.bxor instead of ~
+		hash = (hash * fnv_prime) % 2 ^ 32 -- Keep it 32-bit
 	end
 
 	-- Convert the 32-bit hash into a valid port number (1024-65535)
@@ -23,7 +25,7 @@ local hash_filepath_to_port = function(filepath)
 end
 
 M.setup = function(path)
-	state.path = path or "/home/lentilus/typstest"
+	state.path = path
 	state.port = hash_filepath_to_port(path)
 end
 

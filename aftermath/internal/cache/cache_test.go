@@ -1,6 +1,7 @@
 package cache_test
 
 import (
+	"aftermath/internal/bibliography"
 	"aftermath/internal/cache"
 	"aftermath/internal/database"
 	"io/ioutil"
@@ -15,6 +16,8 @@ type TestSetup struct {
 	rootDir   string
 	dbPath    string
 	db        *database.DB
+	bibPath   string
+	bib       *bibliography.Bibliography
 	testFiles []string
 }
 
@@ -34,18 +37,38 @@ func setupTest(t *testing.T) (*TestSetup, error) {
 	dbPath := dbFile.Name()
 	dbFile.Close()
 
+	// Create temporary bibliography file
+	bibFile, err := ioutil.TempFile("", "bibliography_test.bib")
+	if err != nil {
+		os.RemoveAll(rootDir)
+		os.Remove(dbPath)
+		return nil, err
+	}
+	bibPath := bibFile.Name()
+	bibFile.Close()
+
 	// Initialize database
 	db, err := database.NewDB(dbPath)
 	if err != nil {
 		os.RemoveAll(rootDir)
 		os.Remove(dbPath)
+		os.Remove(bibPath)
 		return nil, err
+	}
+
+	// Initialize bibliography
+	b := &bibliography.Bibliography{
+		Path:     bibPath,
+		DB:       db,
+		Checksum: []byte{},
 	}
 
 	return &TestSetup{
 		rootDir: rootDir,
 		dbPath:  dbPath,
 		db:      db,
+		bibPath: bibPath,
+		bib:     b,
 	}, nil
 }
 
@@ -53,6 +76,7 @@ func (ts *TestSetup) cleanup() {
 	ts.db.Close()
 	os.RemoveAll(ts.rootDir)
 	os.Remove(ts.dbPath)
+	os.Remove(ts.bibPath)
 }
 
 func createTestFile(dir, name, content string) error {
@@ -101,7 +125,7 @@ func TestZettelkastenBasicOperation(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db)
+	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// Run update
 	err = zk.UpdateIncremental()
@@ -191,7 +215,7 @@ func TestFileModification(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db)
+	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// First update
 	err = zk.UpdateIncremental()
@@ -264,7 +288,7 @@ func TestFileDeletion(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db)
+	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// First update
 	err = zk.UpdateIncremental()

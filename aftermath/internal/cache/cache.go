@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"aftermath/internal/bibliography"
 	"aftermath/internal/database"
 	"aftermath/internal/parser"
 	"aftermath/internal/utils"
@@ -27,10 +28,15 @@ type ZettelUpdate struct {
 type Zettelkasten struct {
 	root string
 	db   *database.DB
+	bib  *bibliography.Bibliography
 }
 
-func NewZettelkasten(root string, db *database.DB) *Zettelkasten {
-	return &Zettelkasten{root: root, db: db}
+func NewZettelkasten(
+	root string,
+	db *database.DB,
+	bib *bibliography.Bibliography,
+) *Zettelkasten {
+	return &Zettelkasten{root: root, db: db, bib: bib}
 }
 
 // fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
@@ -60,6 +66,11 @@ func (k *Zettelkasten) UpdateIncremental() error {
 
 	// Wait for all goroutines to finish
 	wg.Wait()
+
+	err := k.bib.Regenerate(k.root)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -280,6 +291,11 @@ func (k *Zettelkasten) UpdateOne(path string) error {
 	}
 
 	log.Println("Upserted 1 zettel.")
+
+	err = k.bib.Regenerate(k.root)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

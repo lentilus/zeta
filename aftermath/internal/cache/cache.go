@@ -186,7 +186,7 @@ func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
 			return err
 		}
 		for _, ref := range refs {
-			link := ref2Link(ref, k.root)
+			link, _ := utils.Reference2Path(ref, k.root)
 			err = k.db.CreateLink(z, link)
 			if err != nil {
 				return err
@@ -263,7 +263,7 @@ func (k *Zettelkasten) UpdateOne(path string) error {
 	}
 
 	for _, ref := range refs {
-		link := ref2Link(ref, k.root)
+		link, _ := utils.Reference2Path(ref, k.root)
 		err = k.db.CreateLink(path, link)
 		if err != nil {
 			return fmt.Errorf("error creating link: %v", err)
@@ -271,12 +271,4 @@ func (k *Zettelkasten) UpdateOne(path string) error {
 	}
 
 	return nil
-}
-
-func ref2Link(ref string, base string) string {
-	if len(ref) < 2 {
-		return ""
-	}
-	file := ref[1:] // remove @ref -> ref
-	return filepath.Join(base, file+".typ")
 }

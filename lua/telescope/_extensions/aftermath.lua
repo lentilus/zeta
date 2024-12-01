@@ -40,6 +40,10 @@ end
 local function children(opts)
 	opts = opts or {}
 	local file = utils.current_file()
+	if not utils.is_zettel(file) then
+		utils.error("not a zettel")
+		return
+	end
 	pickers
 		.new(opts, {
 			prompt_title = "Children",
@@ -55,6 +59,10 @@ end
 local function parents(opts)
 	opts = opts or {}
 	local file = utils.current_file()
+	if not utils.is_zettel(file) then
+		utils.error("not a zettel")
+		return
+	end
 	pickers
 		.new(opts, {
 			prompt_title = "Parents",

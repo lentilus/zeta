@@ -13,6 +13,9 @@ local function request(func, args)
 	if res.error and res.error ~= "<nil>" then
 		error(res.error)
 	end
+	if res.zettels == vim.NIL then
+		return {}
+	end
 	return res.zettels
 end
 

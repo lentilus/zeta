@@ -1,19 +1,19 @@
 package api
 
 import (
-	"aftermath/internal/cache"
 	"aftermath/internal/database"
 	"aftermath/internal/scheduler"
+	"aftermath/internal/store"
 	"fmt"
 )
 
 type Index struct {
 	roDB *database.DB
-	zk   *cache.Zettelkasten
+	zk   *store.Zettelkasten
 	s    *scheduler.Scheduler
 }
 
-func NewIndex(roDB *database.DB, zk *cache.Zettelkasten, s *scheduler.Scheduler) Index {
+func NewIndex(roDB *database.DB, zk *store.Zettelkasten, s *scheduler.Scheduler) Index {
 	return Index{roDB: roDB, zk: zk, s: s}
 }
 

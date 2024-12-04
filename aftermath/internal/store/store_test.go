@@ -1,9 +1,9 @@
-package cache_test
+package store_test
 
 import (
 	"aftermath/internal/bibliography"
-	"aftermath/internal/cache"
 	"aftermath/internal/database"
+	"aftermath/internal/store"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -125,7 +125,7 @@ func TestZettelkastenBasicOperation(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
+	zk := store.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// Run update
 	err = zk.UpdateIncremental()
@@ -215,7 +215,7 @@ func TestFileModification(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
+	zk := store.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// First update
 	err = zk.UpdateIncremental()
@@ -288,7 +288,7 @@ func TestFileDeletion(t *testing.T) {
 		}
 	}
 
-	zk := cache.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
+	zk := store.NewZettelkasten(setup.rootDir, setup.db, setup.bib)
 
 	// First update
 	err = zk.UpdateIncremental()

@@ -3,11 +3,11 @@ package parser
 import (
 	"aftermath/bindings"
 	"context"
+	"fmt"
 	"sync"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )
-
 
 var refQuery = []byte(`((ref) @reference)`)
 
@@ -20,7 +20,6 @@ type IncrementalParser struct {
 	references []string
 	mu         sync.RWMutex
 }
-
 
 // NewIncrementalParser creates a new IncrementalParser instance
 func NewIncrementalParser(initialContent []byte) *IncrementalParser {
@@ -68,13 +67,13 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
-
 	// Perform incremental parse with context
-	oldTree := ip.tree
-	tree, err := ip.parser.ParseCtx(ctx, oldTree, newContent)
+	// oldTree := ip.tree
+	tree, err := ip.parser.ParseCtx(ctx, nil, newContent)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("New tree: %s", fmt.Sprint(tree))
 
 	ip.tree = tree
 	ip.content = newContent
@@ -100,6 +99,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 			newRefs = append(newRefs, ref)
 		}
 	}
+	fmt.Printf("New references are %s", newRefs)
 
 	ip.references = newRefs
 	return tree, nil

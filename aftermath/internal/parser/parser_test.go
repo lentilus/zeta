@@ -77,8 +77,8 @@ func TestIncrementalParser(t *testing.T) {
 		t.Fatal("expected non-nil tree")
 	}
 
-	refs := ip.GetReferences()
-	expected := []string{"@foo", "@bar"}
+	refs = ip.GetReferences()
+	expected = []string{"@foo", "@bar"}
 
 	if len(refs) != len(expected) {
 		t.Errorf("expected %d references, got %d", len(expected), len(refs))

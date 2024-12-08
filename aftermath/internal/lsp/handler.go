@@ -54,9 +54,20 @@ func (ls *LanguageServer) executeCommand(
 	context *glsp.Context,
 	params *protocol.ExecuteCommandParams,
 ) (interface{}, error) {
-	// log.Printf("State is %s", ls.state)
 	log.Println("Hello World")
 	return nil, nil
+}
+
+func reportDiagnostics(context *glsp.Context, uri string, diagnostics []protocol.Diagnostic) {
+	if diagnostics == nil {
+		diagnostics = []protocol.Diagnostic{}
+	}
+	params := protocol.PublishDiagnosticsParams{
+		URI:         uri,
+		Diagnostics: diagnostics,
+	}
+	// Use the Notify function from the context to send the diagnostics
+	context.Notify("textDocument/publishDiagnostics", params)
 }
 
 func (ls *LanguageServer) textDocumentDidOpen(
@@ -71,6 +82,13 @@ func (ls *LanguageServer) textDocumentDidOpen(
 	if err != nil {
 		return fmt.Errorf("failed to initialize parser: %w", err)
 	}
+
+	// Get references and convert them into diagnostics
+	references := ls.parser.GetReferences()
+	diagnostics := convertReferencesToDiagnostics(references)
+
+	// Publish diagnostics using context's Notify function
+	reportDiagnostics(context, params.TextDocument.URI, diagnostics)
 
 	fmt.Printf("Initial References: %s", ls.parser.GetReferenceTexts())
 
@@ -123,7 +141,34 @@ func (ls *LanguageServer) textDocumentDidChange(
 			}
 		}
 	}
+
+	// Get updated references and convert them into diagnostics
+	references := ls.parser.GetReferences()
+	diagnostics := convertReferencesToDiagnostics(references)
+
+	// Publish updated diagnostics using context's Notify function
+	reportDiagnostics(context, params.TextDocument.URI, diagnostics)
+
 	fmt.Printf("References: %s", ls.parser.GetReferenceTexts())
 
 	return nil
+}
+
+func convertReferencesToDiagnostics(references []parser.Reference) []protocol.Diagnostic {
+	var diagnostics []protocol.Diagnostic
+
+	serverity := protocol.DiagnosticSeverityInformation
+	for _, ref := range references {
+		diagnostic := protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: uint32(ref.Range.StartPoint.Row), Character: uint32(ref.Range.StartPoint.Column)},
+				End:   protocol.Position{Line: uint32(ref.Range.EndPoint.Row), Character: uint32(ref.Range.EndPoint.Column)},
+			},
+			Severity: &serverity,                     // You can set this to Warning, Error, etc.
+			Message:  "Reference found: " + ref.Text, // Custom message based on your needs
+		}
+		diagnostics = append(diagnostics, diagnostic)
+	}
+
+	return diagnostics
 }

@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/tliron/glsp"
@@ -12,6 +13,11 @@ func (ls *LanguageServer) initialize(
 	params *protocol.InitializeParams,
 ) (any, error) {
 	capabilities := ls.handler.CreateServerCapabilities()
+	syncKind := protocol.TextDocumentSyncKindIncremental
+	capabilities.TextDocumentSync = &protocol.TextDocumentSyncOptions{
+		OpenClose: &protocol.True, // Notify on open/close of documents
+		Change:    &syncKind,      // Sync full document on change
+	}
 
 	return protocol.InitializeResult{
 		Capabilities: capabilities,
@@ -49,4 +55,40 @@ func (ls *LanguageServer) executeCommand(
 	// log.Printf("State is %s", ls.state)
 	log.Println("Hello World")
 	return nil, nil
+}
+func (ls *LanguageServer) textDocumentDidOpen(
+	context *glsp.Context,
+	params *protocol.DidOpenTextDocumentParams,
+) error {
+	fmt.Println("Opened document")
+	return nil
+}
+
+// textDocumentDidChange prints document contents to stdout on each change
+func (ls *LanguageServer) textDocumentDidChange(
+	context *glsp.Context,
+	params *protocol.DidChangeTextDocumentParams,
+) error {
+	// Iterate over all content changes
+	for _, change := range params.ContentChanges {
+		switch contentChange := change.(type) {
+		case protocol.TextDocumentContentChangeEvent:
+			// Handle the change if it contains a specific range
+			if contentChange.Range != nil {
+				fmt.Printf("Document '%s' changed in range [%d:%d - %d:%d]:\n%s\n",
+					params.TextDocument.URI,
+					contentChange.Range.Start.Line, contentChange.Range.Start.Character,
+					contentChange.Range.End.Line, contentChange.Range.End.Character,
+					contentChange.Text)
+			}
+		case protocol.TextDocumentContentChangeEventWhole:
+			// Handle the whole document change
+			fmt.Printf("Document '%s' changed completely:\n%s\n",
+				params.TextDocument.URI, contentChange.Text)
+		default:
+			return fmt.Errorf("unknown content change type")
+		}
+	}
+
+	return nil
 }

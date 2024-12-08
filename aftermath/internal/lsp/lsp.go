@@ -25,6 +25,8 @@ func NewServer() *server.Server {
 		Shutdown:                ls.shutdown,
 		SetTrace:                ls.setTrace,
 		WorkspaceExecuteCommand: ls.executeCommand,
+		TextDocumentDidChange:   ls.textDocumentDidChange,
+		TextDocumentDidOpen:     ls.textDocumentDidOpen,
 	}
 
 	// Create the LSP server

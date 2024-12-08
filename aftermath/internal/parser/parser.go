@@ -8,6 +8,13 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+type InputEncoding = sitter.InputEncoding
+
+const (
+	InputEncodingUTF8  InputEncoding = sitter.InputEncodingUTF8
+	InputEncodingUTF16 InputEncoding = sitter.InputEncodingUTF16
+)
+
 var refQuery = []byte(`((ref) @reference)`)
 
 // IncrementalParser holds the parser state and parsed references
@@ -95,6 +102,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 		Read: func(offset uint32, position sitter.Point) []byte {
 			return ip.reader.Read(offset)
 		},
+		Encoding: InputEncodingUTF8,
 	}
 
 	// Perform incremental parse with context

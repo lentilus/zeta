@@ -47,13 +47,13 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 		content: initialContent,
 		reader:  reader,
 	}
-	
+
 	// Parse initial content
 	input := sitter.Input{
-		Read:     func(offset uint32, position sitter.Point) []byte {
+		Read: func(offset uint32, position sitter.Point) []byte {
 			return reader.Read(offset)
 		},
-		Encoding: sitter.UTF8Encoding,
+		// Encoding: sitter.UTF8Encoding,
 	}
 	ip.tree = parser.ParseInput(nil, input)
 	return ip
@@ -67,13 +67,13 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 
 	// Update reader with new content
 	ip.reader.content = newContent
-	
+
 	// Create input for tree-sitter
 	input := sitter.Input{
-		Read:     func(offset uint32, position sitter.Point) []byte {
+		Read: func(offset uint32, position sitter.Point) []byte {
 			return ip.reader.Read(offset)
 		},
-		Encoding: sitter.UTF8Encoding,
+		// Encoding: sitter.UTF8Encoding,
 	}
 
 	// Perform incremental parse with context
@@ -82,7 +82,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	if err != nil {
 		return nil, err
 	}
-	
+
 	ip.tree = tree
 	ip.content = newContent
 
@@ -115,7 +115,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 func (ip *IncrementalParser) GetReferences() []string {
 	ip.mu.RLock()
 	defer ip.mu.RUnlock()
-	
+
 	// Return a copy to prevent external modifications
 	refs := make([]string, len(ip.references))
 	copy(refs, ip.references)

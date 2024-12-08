@@ -50,7 +50,23 @@ func TestIncrementalParser(t *testing.T) {
 	ip := parser.NewIncrementalParser(content)
 	defer ip.Close()
 
-	err := ip.Parse()
+	// Initial parse happens in constructor
+	refs = ip.GetReferences()
+	expected = []string{"@foo", "@bar", "@baz"}
+
+	if len(refs) != len(expected) {
+		t.Errorf("expected %d references, got %d", len(expected), len(refs))
+	}
+
+	// Test incremental update
+	newContent := []byte(`
+		some text with a ref to @foo
+		another line without a ref
+		and a ref here as well @bar
+		and a new ref @baz
+	`)
+
+	err := ip.Parse(newContent)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

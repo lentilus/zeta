@@ -11,31 +11,65 @@ var refQuery = []byte(`((ref) @reference)`)
 
 // IncrementalParser holds the parser state and parsed references
 type IncrementalParser struct {
-	parser     *Parser
+	parser     *sitter.Parser
+	lang       *sitter.Language
+	tree       *sitter.Tree
 	content    []byte
 	references []string
 	mu         sync.RWMutex
 }
 
 // NewIncrementalParser creates a new IncrementalParser instance
-func NewIncrementalParser(content []byte) *IncrementalParser {
-	return &IncrementalParser{
-		parser:  NewParser(),
-		content: content,
+func NewIncrementalParser(initialContent []byte) *IncrementalParser {
+	parser := sitter.NewParser()
+	lang := sitter.NewLanguage(bindings.Language())
+	parser.SetLanguage(lang)
+
+	ip := &IncrementalParser{
+		parser:  parser,
+		lang:    lang,
+		content: initialContent,
 	}
+	
+	// Parse initial content
+	ip.tree = parser.Parse(nil, initialContent)
+	return ip
 }
 
-// Parse parses the content and stores references in a thread-safe manner
-func (ip *IncrementalParser) Parse() error {
-	refs, err := ip.parser.GetReferences(ip.content)
+// Parse updates the content and incrementally updates the parse tree and references
+func (ip *IncrementalParser) Parse(newContent []byte) error {
+	ip.mu.Lock()
+	defer ip.mu.Unlock()
+
+	// Perform incremental parse
+	oldTree := ip.tree
+	ip.tree = ip.parser.ParseWithOptions(oldTree, newContent, sitter.ParseOptions{
+		Encoding: sitter.Encoding(sitter.UTF8),
+	})
+	ip.content = newContent
+
+	// Update references using the new tree
+	query, err := sitter.NewQuery(refQuery, ip.lang)
 	if err != nil {
 		return err
 	}
 
-	ip.mu.Lock()
-	ip.references = refs
-	ip.mu.Unlock()
+	cursor := sitter.NewQueryCursor()
+	cursor.Exec(query, ip.tree.RootNode())
 
+	var newRefs []string
+	for {
+		m, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		m = cursor.FilterPredicates(m, newContent)
+		for _, c := range m.Captures {
+			newRefs = append(newRefs, c.Node.Content(newContent))
+		}
+	}
+
+	ip.references = newRefs
 	return nil
 }
 
@@ -52,7 +86,10 @@ func (ip *IncrementalParser) GetReferences() []string {
 
 // Close releases resources
 func (ip *IncrementalParser) Close() {
-	ip.parser.CloseParser()
+	if ip.tree != nil {
+		ip.tree.Close()
+	}
+	ip.parser.Close()
 }
 
 type Parser struct {

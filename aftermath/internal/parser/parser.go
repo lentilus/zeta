@@ -107,14 +107,14 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	ip.tree = tree
 	ip.content = newContent
 
-	// Update references using the new tree
+	// Update references using the new tree and content
 	query, err := sitter.NewQuery(refQuery, ip.lang)
 	if err != nil {
 		return nil, err
 	}
 
 	cursor := sitter.NewQueryCursor()
-	cursor.Exec(query, ip.tree.RootNode())
+	cursor.Exec(query, tree.RootNode())
 
 	var newRefs []string
 	for {
@@ -124,7 +124,8 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 		}
 		m = cursor.FilterPredicates(m, newContent)
 		for _, c := range m.Captures {
-			newRefs = append(newRefs, c.Node.Content(newContent))
+			ref := c.Node.Content(newContent)
+			newRefs = append(newRefs, ref)
 		}
 	}
 

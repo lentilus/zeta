@@ -55,6 +55,29 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 		},
 	}
 	ip.tree = parser.ParseInput(nil, input)
+	
+	// Parse initial references
+	query, err := sitter.NewQuery(refQuery, ip.lang)
+	if err != nil {
+		return ip // Return even if query fails
+	}
+
+	cursor := sitter.NewQueryCursor()
+	cursor.Exec(query, ip.tree.RootNode())
+
+	var initialRefs []string
+	for {
+		m, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		m = cursor.FilterPredicates(m, initialContent)
+		for _, c := range m.Captures {
+			initialRefs = append(initialRefs, c.Node.Content(initialContent))
+		}
+	}
+
+	ip.references = initialRefs
 	return ip
 }
 

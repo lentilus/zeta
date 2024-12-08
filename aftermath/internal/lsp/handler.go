@@ -1,6 +1,8 @@
 package lsp
 
 import (
+	"aftermath/internal/parser"
+	con "context"
 	"fmt"
 	"log"
 
@@ -56,39 +58,72 @@ func (ls *LanguageServer) executeCommand(
 	log.Println("Hello World")
 	return nil, nil
 }
+
 func (ls *LanguageServer) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
 	fmt.Println("Opened document")
+
+	// Initialize parser with the full document content
+	var err error
+	ls.parser, err = parser.NewIncrementalParser([]byte(params.TextDocument.Text))
+	if err != nil {
+		return fmt.Errorf("failed to initialize parser: %w", err)
+	}
+
+	fmt.Printf("Initial References: %s", ls.parser.GetReferenceTexts())
+
 	return nil
 }
 
-// textDocumentDidChange prints document contents to stdout on each change
 func (ls *LanguageServer) textDocumentDidChange(
 	context *glsp.Context,
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
-	// Iterate over all content changes
 	for _, change := range params.ContentChanges {
 		switch contentChange := change.(type) {
-		case protocol.TextDocumentContentChangeEvent:
-			// Handle the change if it contains a specific range
-			if contentChange.Range != nil {
-				fmt.Printf("Document '%s' changed in range [%d:%d - %d:%d]:\n%s\n",
-					params.TextDocument.URI,
-					contentChange.Range.Start.Line, contentChange.Range.Start.Character,
-					contentChange.Range.End.Line, contentChange.Range.End.Character,
-					contentChange.Text)
-			}
 		case protocol.TextDocumentContentChangeEventWhole:
-			// Handle the whole document change
-			fmt.Printf("Document '%s' changed completely:\n%s\n",
-				params.TextDocument.URI, contentChange.Text)
-		default:
-			return fmt.Errorf("unknown content change type")
+			fmt.Println("Full Content Change")
+			// Initialize or reinitialize parser with full document content
+			if ls.parser != nil {
+				ls.parser.Close()
+			}
+
+			var err error
+			ls.parser, err = parser.NewIncrementalParser([]byte(contentChange.Text))
+			if err != nil {
+				return fmt.Errorf("failed to initialize parser: %w", err)
+			}
+
+		case protocol.TextDocumentContentChangeEvent:
+			fmt.Println("Partial Document Change")
+			// Handle incremental changes
+			if ls.parser == nil {
+				return fmt.Errorf("parser not initialized")
+			}
+
+			if contentChange.Range != nil {
+				change := parser.DocumentChange{
+					StartPos: ls.parser.CalculateOffset(parser.Position{
+						Line:      uint32(contentChange.Range.Start.Line),
+						Character: uint32(contentChange.Range.Start.Character),
+					}),
+					EndPos: ls.parser.CalculateOffset(parser.Position{
+						Line:      uint32(contentChange.Range.End.Line),
+						Character: uint32(contentChange.Range.End.Character),
+					}),
+					NewText:   []byte(contentChange.Text),
+					IsPartial: true,
+				}
+
+				if err := ls.parser.ApplyChanges(con.Background(), []parser.DocumentChange{change}); err != nil {
+					return fmt.Errorf("failed to apply changes: %w", err)
+				}
+			}
 		}
 	}
+	fmt.Printf("References: %s", ls.parser.GetReferenceTexts())
 
 	return nil
 }

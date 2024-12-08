@@ -1,6 +1,8 @@
 package lsp
 
 import (
+	"aftermath/internal/parser"
+
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
@@ -12,6 +14,7 @@ var version string = "0.0.1"
 type LanguageServer struct {
 	state   string
 	handler protocol.Handler
+	parser  *parser.IncrementalParser
 }
 
 // NewServer initializes and returns a new LSP server instance.

@@ -8,12 +8,6 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-type InputEncoding = sitter.InputEncoding
-
-const (
-	InputEncodingUTF8  InputEncoding = sitter.InputEncodingUTF8
-	InputEncodingUTF16 InputEncoding = sitter.InputEncodingUTF16
-)
 
 var refQuery = []byte(`((ref) @reference)`)
 

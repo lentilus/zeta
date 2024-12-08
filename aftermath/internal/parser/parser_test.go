@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"aftermath/internal/parser"
+	"context"
 	"sync"
 	"testing"
 )
@@ -51,8 +52,8 @@ func TestIncrementalParser(t *testing.T) {
 	defer ip.Close()
 
 	// Initial parse happens in constructor
-	refs = ip.GetReferences()
-	expected = []string{"@foo", "@bar", "@baz"}
+	refs := ip.GetReferences()
+	expected := []string{"@foo", "@bar"}
 
 	if len(refs) != len(expected) {
 		t.Errorf("expected %d references, got %d", len(expected), len(refs))

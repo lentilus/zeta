@@ -28,18 +28,6 @@ type IncrementalParser struct {
 	reader     *contentReader
 }
 
-// contentReader implements tree-sitter's Input.Read interface
-type contentReader struct {
-	content []byte
-	offset  uint32
-}
-
-func (r *contentReader) Read(offset uint32) []byte {
-	if offset >= uint32(len(r.content)) {
-		return nil
-	}
-	return r.content[offset:]
-}
 
 // NewIncrementalParser creates a new IncrementalParser instance
 func NewIncrementalParser(initialContent []byte) *IncrementalParser {
@@ -47,21 +35,14 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 	lang := sitter.NewLanguage(bindings.Language())
 	parser.SetLanguage(lang)
 
-	reader := &contentReader{content: initialContent}
 	ip := &IncrementalParser{
 		parser:  parser,
 		lang:    lang,
 		content: initialContent,
-		reader:  reader,
 	}
 
 	// Parse initial content
-	input := sitter.Input{
-		Read: func(offset uint32, position sitter.Point) []byte {
-			return reader.Read(offset)
-		},
-	}
-	ip.tree = parser.ParseInput(nil, input)
+	ip.tree = parser.Parse(nil, initialContent)
 
 	// Parse initial references
 	query, err := sitter.NewQuery(refQuery, ip.lang)
@@ -97,17 +78,9 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	// Update reader with new content
 	ip.reader.content = newContent
 
-	// Create input for tree-sitter
-	input := sitter.Input{
-		Read: func(offset uint32, position sitter.Point) []byte {
-			return ip.reader.Read(offset)
-		},
-		Encoding: InputEncodingUTF8,
-	}
-
 	// Perform incremental parse with context
 	oldTree := ip.tree
-	tree, err := ip.parser.ParseInputCtx(ctx, oldTree, input)
+	tree, err := ip.parser.ParseCtx(ctx, oldTree, newContent)
 	if err != nil {
 		return nil, err
 	}

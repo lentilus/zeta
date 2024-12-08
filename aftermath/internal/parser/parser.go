@@ -9,7 +9,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-var refQuery = []byte(`((ref) @reference)`)
+var refQuery = []byte(`(ref) @reference`)
 
 // IncrementalParser holds the parser state and parsed references
 type IncrementalParser struct {
@@ -99,7 +99,11 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 			newRefs = append(newRefs, ref)
 		}
 	}
-	fmt.Printf("New references are %s", newRefs)
+	fmt.Printf("New references are %v\n", newRefs)
+	fmt.Printf("Debug - Node contents:\n")
+	for _, c := range cursor.Captures {
+		fmt.Printf("Node type: %s, Content: %q\n", c.Node.Type(), c.Node.Content(newContent))
+	}
 
 	ip.references = newRefs
 	return tree, nil

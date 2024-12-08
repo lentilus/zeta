@@ -66,7 +66,7 @@ func TestIncrementalParser(t *testing.T) {
 		and a new ref @baz
 	`)
 
-	err := ip.Parse(newContent)
+	err := ip.Parse(context.Background(), newContent)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

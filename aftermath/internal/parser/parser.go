@@ -2,6 +2,7 @@ package parser
 
 import (
 	"aftermath/bindings"
+	"context"
 	"sync"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -37,15 +38,24 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 }
 
 // Parse updates the content and incrementally updates the parse tree and references
-func (ip *IncrementalParser) Parse(newContent []byte) error {
+func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) error {
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
-	// Perform incremental parse
-	oldTree := ip.tree
-	ip.tree = ip.parser.ParseWithOptions(oldTree, newContent, sitter.ParseOptions{
+	// Create input for tree-sitter
+	input := sitter.Input{
+		Content: newContent,
 		Encoding: sitter.Encoding(sitter.UTF8),
-	})
+	}
+
+	// Perform incremental parse with context
+	oldTree := ip.tree
+	tree, err := ip.parser.ParseCtx(ctx, oldTree, input)
+	if err != nil {
+		return err
+	}
+	
+	ip.tree = tree
 	ip.content = newContent
 
 	// Update references using the new tree

@@ -18,6 +18,20 @@ type IncrementalParser struct {
 	content    []byte
 	references []string
 	mu         sync.RWMutex
+	reader     *contentReader
+}
+
+// contentReader implements tree-sitter's Input.Read interface
+type contentReader struct {
+	content []byte
+	offset  uint32
+}
+
+func (r *contentReader) Read(offset uint32) []byte {
+	if offset >= uint32(len(r.content)) {
+		return nil
+	}
+	return r.content[offset:]
 }
 
 // NewIncrementalParser creates a new IncrementalParser instance
@@ -26,14 +40,20 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 	lang := sitter.NewLanguage(bindings.Language())
 	parser.SetLanguage(lang)
 
+	reader := &contentReader{content: initialContent}
 	ip := &IncrementalParser{
 		parser:  parser,
 		lang:    lang,
 		content: initialContent,
+		reader:  reader,
 	}
 	
 	// Parse initial content
-	ip.tree = parser.Parse(nil, initialContent)
+	input := sitter.Input{
+		Read:     reader.Read,
+		Encoding: sitter.Encoding(sitter.UTF8),
+	}
+	ip.tree = parser.ParseInput(nil, input)
 	return ip
 }
 
@@ -43,15 +63,18 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
+	// Update reader with new content
+	ip.reader.content = newContent
+	
 	// Create input for tree-sitter
 	input := sitter.Input{
-		Content: newContent,
+		Read:     ip.reader.Read,
 		Encoding: sitter.Encoding(sitter.UTF8),
 	}
 
 	// Perform incremental parse with context
 	oldTree := ip.tree
-	tree, err := ip.parser.ParseCtx(ctx, oldTree, input)
+	tree, err := ip.parser.ParseInputCtx(ctx, oldTree, input)
 	if err != nil {
 		return nil, err
 	}

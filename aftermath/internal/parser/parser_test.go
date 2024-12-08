@@ -52,8 +52,8 @@ func TestIncrementalParser(t *testing.T) {
 	defer ip.Close()
 
 	// Initial parse happens in constructor
-	refs := ip.GetReferences()
-	expected := []string{"@foo", "@bar"}
+	refs = ip.GetReferences()
+	expected = []string{"@foo", "@bar", "@baz"}
 
 	if len(refs) != len(expected) {
 		t.Errorf("expected %d references, got %d", len(expected), len(refs))

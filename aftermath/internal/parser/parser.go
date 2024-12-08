@@ -68,8 +68,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	defer ip.mu.Unlock()
 
 	// Perform incremental parse with context
-	// oldTree := ip.tree
-	tree, err := ip.parser.ParseCtx(ctx, nil, newContent)
+	tree, err := ip.parser.ParseCtx(ctx, ip.tree, newContent)
 	if err != nil {
 		return nil, err
 	}

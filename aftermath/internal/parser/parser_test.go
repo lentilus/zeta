@@ -97,8 +97,8 @@ func TestIncrementalParser(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			refs := ip.GetReferences()
-			if len(refs) != 2 {
-				t.Errorf("concurrent access: expected 2 references, got %d", len(refs))
+			if len(refs) != 3 {
+				t.Errorf("concurrent access: expected 3 references, got %d", len(refs))
 			}
 		}()
 	}

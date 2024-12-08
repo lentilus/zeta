@@ -101,8 +101,16 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	}
 	fmt.Printf("New references are %v\n", newRefs)
 	fmt.Printf("Debug - Node contents:\n")
-	for _, c := range cursor.Captures {
-		fmt.Printf("Node type: %s, Content: %q\n", c.Node.Type(), c.Node.Content(newContent))
+	cursor.Reset()
+	for {
+		m, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		m = cursor.FilterPredicates(m, newContent)
+		for _, c := range m.Captures {
+			fmt.Printf("Node type: %s, Content: %q\n", c.Node.Type(), c.Node.Content(newContent))
+		}
 	}
 
 	ip.references = newRefs

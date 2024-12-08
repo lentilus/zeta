@@ -50,8 +50,10 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 	
 	// Parse initial content
 	input := sitter.Input{
-		Read:     reader.Read,
-		Encoding: sitter.Encoding(sitter.UTF8),
+		Read:     func(offset uint32, position sitter.Point) []byte {
+			return reader.Read(offset)
+		},
+		Encoding: sitter.UTF8Encoding,
 	}
 	ip.tree = parser.ParseInput(nil, input)
 	return ip

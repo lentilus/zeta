@@ -25,7 +25,6 @@ type IncrementalParser struct {
 	content    []byte
 	references []string
 	mu         sync.RWMutex
-	reader     *contentReader
 }
 
 
@@ -75,8 +74,6 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
-	// Update reader with new content
-	ip.reader.content = newContent
 
 	// Perform incremental parse with context
 	oldTree := ip.tree

@@ -2,7 +2,7 @@ package bibliography_test
 
 import (
 	"aftermath/internal/bibliography"
-	"aftermath/internal/database"
+	"aftermath/internal/cache/database"
 	"os"
 	"testing"
 )

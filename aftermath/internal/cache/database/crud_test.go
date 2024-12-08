@@ -1,7 +1,7 @@
 package database_test
 
 import (
-	"aftermath/internal/database"
+	"aftermath/internal/cache/database"
 	"testing"
 	"time"
 )

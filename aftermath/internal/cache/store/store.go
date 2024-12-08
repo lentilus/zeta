@@ -2,7 +2,7 @@ package store
 
 import (
 	"aftermath/internal/bibliography"
-	"aftermath/internal/database"
+	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"aftermath/internal/utils"
 	"bytes"
@@ -25,18 +25,18 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
-type Zettelkasten struct {
+type ZettelStore struct {
 	root string
 	db   *database.DB
 	bib  *bibliography.Bibliography
 }
 
-func NewZettelkasten(
+func NewZettelStore(
 	root string,
 	db *database.DB,
 	bib *bibliography.Bibliography,
-) *Zettelkasten {
-	return &Zettelkasten{root: root, db: db, bib: bib}
+) *ZettelStore {
+	return &ZettelStore{root: root, db: db, bib: bib}
 }
 
 // fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
@@ -45,7 +45,7 @@ func fileNameFilter(name string) bool {
 }
 
 // UpdateIncremental is the main function to set up the directory walking and processing routines.
-func (k *Zettelkasten) UpdateIncremental() error {
+func (k *ZettelStore) UpdateIncremental() error {
 	fileMetadataChan := make(chan FileMetadata, 10000)
 	var wg sync.WaitGroup
 
@@ -100,7 +100,7 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 }
 
 // findUpdates reads file metadata from the channel and processes it.
-func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
+func (k *ZettelStore) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	zettels, err := k.db.GetAll()
@@ -140,7 +140,7 @@ func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *syn
 	return nil
 }
 
-func (k *Zettelkasten) processUpdates(
+func (k *ZettelStore) processUpdates(
 	updateChan <-chan ZettelUpdate,
 	wg *sync.WaitGroup,
 ) {
@@ -199,7 +199,7 @@ func (k *Zettelkasten) processUpdates(
 	}
 }
 
-func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
+func (k *ZettelStore) updateLinks(newLinks map[string][]string) error {
 	for z, refs := range newLinks {
 		err := k.db.DeleteLinks(z)
 		if err != nil {
@@ -217,7 +217,7 @@ func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
 }
 
 // UpdateOne processes a single Zettel file given its path.
-func (k *Zettelkasten) UpdateOne(path string) error {
+func (k *ZettelStore) UpdateOne(path string) error {
 	// Check if file exists and get its info
 	fileInfo, err := os.Stat(path)
 	if err != nil {

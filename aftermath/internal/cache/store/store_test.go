@@ -2,8 +2,8 @@ package store_test
 
 import (
 	"aftermath/internal/bibliography"
-	"aftermath/internal/database"
-	"aftermath/internal/store"
+	"aftermath/internal/cache/database"
+	"aftermath/internal/cache/store"
 	"io/ioutil"
 	"os"
 	"path/filepath"

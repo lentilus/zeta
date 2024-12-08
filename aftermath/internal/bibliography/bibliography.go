@@ -1,7 +1,7 @@
 package bibliography
 
 import (
-	"aftermath/internal/database"
+	"aftermath/internal/cache/database"
 	"aftermath/internal/utils"
 	"fmt"
 	"log"

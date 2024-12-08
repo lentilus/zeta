@@ -37,8 +37,9 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 	return ip
 }
 
-// Parse updates the content and incrementally updates the parse tree and references
-func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) error {
+// Parse updates the content and incrementally updates the parse tree and references.
+// Returns the updated tree-sitter Tree.
+func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sitter.Tree, error) {
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
@@ -52,7 +53,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) error
 	oldTree := ip.tree
 	tree, err := ip.parser.ParseCtx(ctx, oldTree, input)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	
 	ip.tree = tree
@@ -61,7 +62,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) error
 	// Update references using the new tree
 	query, err := sitter.NewQuery(refQuery, ip.lang)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cursor := sitter.NewQueryCursor()
@@ -80,7 +81,7 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) error
 	}
 
 	ip.references = newRefs
-	return nil
+	return tree, nil
 }
 
 // GetReferences returns the parsed references in a thread-safe manner

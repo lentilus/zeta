@@ -66,9 +66,12 @@ func TestIncrementalParser(t *testing.T) {
 		and a new ref @baz
 	`)
 
-	err := ip.Parse(context.Background(), newContent)
+	tree, err := ip.Parse(context.Background(), newContent)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("expected non-nil tree")
 	}
 
 	refs := ip.GetReferences()

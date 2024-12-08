@@ -62,7 +62,7 @@ func NewIncrementalParser(initialContent []byte) *IncrementalParser {
 		},
 	}
 	ip.tree = parser.ParseInput(nil, input)
-	
+
 	// Parse initial references
 	query, err := sitter.NewQuery(refQuery, ip.lang)
 	if err != nil {

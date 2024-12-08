@@ -68,8 +68,10 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	
 	// Create input for tree-sitter
 	input := sitter.Input{
-		Read:     ip.reader.Read,
-		Encoding: sitter.Encoding(sitter.UTF8),
+		Read:     func(offset uint32, position sitter.Point) []byte {
+			return ip.reader.Read(offset)
+		},
+		Encoding: sitter.UTF8Encoding,
 	}
 
 	// Perform incremental parse with context

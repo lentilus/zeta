@@ -145,7 +145,7 @@ func (k *ZettelStore) processUpdates(
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
-	parser := parser.NewParser()
+	parser := parser.NewOneTimeParser()
 	defer parser.CloseParser()
 
 	newLinks := make(map[string][]string)
@@ -256,7 +256,7 @@ func (k *ZettelStore) UpdateOne(path string) error {
 	}
 
 	// Parse references
-	parser := parser.NewParser()
+	parser := parser.NewOneTimeParser()
 	defer parser.CloseParser()
 
 	refs, err := parser.GetReferences(content)

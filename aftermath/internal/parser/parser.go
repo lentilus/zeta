@@ -72,7 +72,8 @@ func (ip *IncrementalParser) Parse(ctx context.Context, newContent []byte) (*sit
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("New tree: %s", fmt.Sprint(tree))
+	fmt.Printf("New tree: %s\n", fmt.Sprint(tree))
+	fmt.Printf("Content: %s\n", string(newContent))
 
 	ip.tree = tree
 	ip.content = newContent

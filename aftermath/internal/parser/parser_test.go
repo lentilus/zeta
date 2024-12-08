@@ -9,11 +9,9 @@ import (
 
 func TestGetReferences(t *testing.T) {
 	// Sample content to be parsed
-	content := []byte(`
-		some text with a ref to @foo
-		another line without a ref
-		and a ref here as well @bar
-	`)
+	content := []byte(`some text with a ref to @foo
+another line without a ref
+and a ref here as well @bar`)
 
 	// Expected results based on the refQuery pattern
 	expectedReferences := []string{"@foo", "@bar"}
@@ -62,12 +60,10 @@ func TestIncrementalParser(t *testing.T) {
 	}
 
 	// Test incremental update
-	newContent := []byte(`
-		some text with a ref to @foo
-		another line without a ref
-		and a ref here as well @bar
-		and a new ref @baz
-	`)
+	newContent := []byte(`some text with a ref to @foo
+another line without a ref
+and a ref here as well @bar
+and a new ref @baz`)
 
 	tree, err := ip.Parse(context.Background(), newContent)
 	if err != nil {

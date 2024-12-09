@@ -4,7 +4,7 @@ import (
 	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
-	"fmt"
+	"log"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
@@ -15,13 +15,14 @@ type Document parser.IncrementalParser
 // It manages long term caching.
 type Store struct {
 	root string
-	db   database.DB               // shared between clients
-	bib  bibliography.Bibliography // shared between clients
+	db   database.DB
+	bib  bibliography.Bibliography
 }
 
 func NewStore(root string) *Store {
 	// Todo generate database connection
 	// and bib from the root
+	// This should also start the incremental Indexing
 	return &Store{
 		root: root,
 		// db: todo
@@ -52,8 +53,9 @@ func (c *Cache) OpenDocument(identifier string, content []byte) error {
 		return err
 	}
 
-	// TODO return refernces here
-	fmt.Println(parser.GetReferences())
+	log.Println("Hello from OpenDocument")
+	log.Println("Initial References:")
+	log.Println(parser.GetReferences())
 	return nil
 
 }
@@ -62,10 +64,10 @@ func (c *Cache) OpenDocument(identifier string, content []byte) error {
 func (c *Cache) UpdateDocument() {}
 
 // CloseDocument frees all ressources associated with an open document
-func (c *Cache) CloseDocument() {}
+func (c *Cache) CloseDocument(identifier string) {}
 
 // Commit applies the references from Document to the shared store
-func (c *Cache) Commit() {}
+func (c *Cache) Commit(identifier string) {}
 
 // Returns the referenced zettel at a given position in the Document
 func (c *Cache) ChildAt() {}

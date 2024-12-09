@@ -40,6 +40,32 @@ func (db *DB) GetAll() (map[string]Zettel, error) {
 	return zettelMap, nil
 }
 
+// GetAllSorted loads all zettels from the database and returns them as a slice sorted by id.
+func (db *DB) GetAllSorted() ([]Zettel, error) {
+	query := `SELECT id, path, checksum, last_updated FROM zettels ORDER BY id ASC`
+
+	rows, err := db.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve zettels: %w", err)
+	}
+	defer rows.Close()
+
+	var zettels []Zettel
+	for rows.Next() {
+		var z Zettel
+		if err := rows.Scan(&z.ID, &z.Path, &z.Checksum, &z.LastUpdated); err != nil {
+			return nil, fmt.Errorf("failed to scan zettel: %w", err)
+		}
+		zettels = append(zettels, z)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error encountered while iterating over rows: %w", err)
+	}
+
+	return zettels, nil
+}
+
 // DeleteZettels deletes zettels from the database based on a list of IDs.
 func (db *DB) DeleteZettels(ids []int) error {
 	if len(ids) == 0 {

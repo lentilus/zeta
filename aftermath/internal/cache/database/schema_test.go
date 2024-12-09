@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"aftermath/internal/database"
+	"aftermath/internal/cache/database"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )

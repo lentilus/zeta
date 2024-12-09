@@ -6,7 +6,7 @@ import (
 )
 
 // Database schema version
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // NewDB initializes a new SQLite database connection, creates tables if they don’t exist,
 // and returns a DB struct with the connection.
@@ -72,7 +72,7 @@ func (db *DB) setup() error {
 	return nil
 }
 
-// createTables runs the SQL commands to create the necessary tables (zettels, links)
+// createTables runs the SQL commands to create the necessary tables (zettels, links, metadata)
 func (db *DB) createTables(tx *sql.Tx) error {
 	// SQL command to create zettels table
 	createZettelsTable := `
@@ -95,12 +95,24 @@ func (db *DB) createTables(tx *sql.Tx) error {
 	);
 	`
 
+	// SQL command to create metadata table
+	createMetadataTable := `
+	CREATE TABLE IF NOT EXISTS metadata (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		"key" TEXT UNIQUE NOT NULL,
+		value BLOB NOT NULL
+	);
+	`
+
 	// Execute SQL statements
 	if _, err := tx.Exec(createZettelsTable); err != nil {
 		return fmt.Errorf("failed to create zettels table: %w", err)
 	}
 	if _, err := tx.Exec(createLinksTable); err != nil {
 		return fmt.Errorf("failed to create links table: %w", err)
+	}
+	if _, err := tx.Exec(createMetadataTable); err != nil {
+		return fmt.Errorf("failed to create metadata table: %w", err)
 	}
 
 	// Check and set schema version

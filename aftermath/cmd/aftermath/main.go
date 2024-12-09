@@ -1,54 +1,38 @@
 package main
 
 import (
-	"aftermath/internal/api"
-	"aftermath/internal/cache"
-	"aftermath/internal/database"
-	"aftermath/internal/scheduler"
-	"flag"
+	"aftermath/internal/lsp"
+	"io"
 	"log"
-	"time"
+	"os"
+
+	"github.com/tliron/commonlog"
+
+	// Must include a backend implementation
+	// See CommonLog for other options: https://github.com/tliron/commonlog
+	_ "github.com/tliron/commonlog/simple"
 )
 
 func main() {
-	port := flag.Int("port", 1234, "The port on which the server will listen.")
-	root := flag.String("root", "/home/lentilus/typstest/", "The root of the zettel kasten.")
-	cachefile := flag.String(
-		"cache",
-		"/home/lentilus/typstest/lul.sqlite",
-		"The full path to the sqlite cache.",
-	)
+	// The logger for tlirons server
+	commonlog.Configure(1, nil)
 
-	flag.Parse()
-
-	// Initialize read-write db for cache update
-	rwDB, err := database.NewDB(*cachefile)
+	// Open a log file for writing logs
+	logFile, err := os.OpenFile("/tmp/amlogs", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to open log file: %v", err)
 	}
-	defer rwDB.Close()
+	defer logFile.Close()
 
-	// Initialize read-only db for api
-	roDB, err := database.NewReadonlyDB(*cachefile, 1000)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer roDB.Close()
+	// Set up MultiWriter to log to both os.Stderr and the file
+	multiWriter := io.MultiWriter(os.Stderr, logFile)
+	log.SetOutput(multiWriter)
 
-	// Create and start new scheduler
-	s := scheduler.NewScheduler(10)
-	go s.RunScheduler()
-	defer s.StopScheduler()
+	// Initialize the protocol handler with methods tied to the LanguageServer
+	server, _ := lsp.NewServer("/path/to/root")
 
-	// Schedule incremental updates every 5 minutes
-	zk := cache.NewZettelkasten(*root, rwDB)
-	go func() {
-		t := scheduler.Task{Name: "Incremental Cache Update", Execute: zk.UpdateIncremental}
-		s.SchedulePeriodicTask(5*time.Minute, t)
-	}()
+	// Log a message before running server for debugging purposes
+	log.Println("Starting server...")
 
-	// Initialize the JSON-RPC api
-	index := api.NewIndex(roDB, zk, s)
-	server := api.NewJSONRPCServer(&index, "API", *port)
-	server.Start()
+	panic(server.RunStdio())
 }

@@ -123,3 +123,33 @@ func (db *DB) UpsertZettel(zettel Zettel) error {
 	`
 	return db.executeTransaction(query, zettel.Path, zettel.Checksum, zettel.LastUpdated)
 }
+
+// UpsertMetadata inserts or updates metadata based on the key.
+func (db *DB) UpsertMetadata(key string, value []byte) error {
+	upsertMetadataSQL := `
+		INSERT INTO metadata ("key", value) 
+		VALUES (?, ?)
+		ON CONFLICT("key") 
+		DO UPDATE SET value = excluded.value;
+	`
+	return db.executeTransaction(upsertMetadataSQL, key, value)
+}
+
+// GetMetadata retrieves metadata based on the key.
+func (db *DB) GetMetadata(key string) ([]byte, error) {
+	var value []byte
+
+	// SQL command to retrieve metadata by key
+	getMetadataSQL := `SELECT value FROM metadata WHERE "key" = ?`
+
+	// Execute the query
+	err := db.Conn.QueryRow(getMetadataSQL, key).Scan(&value)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("metadata not found for key: %s", key)
+		}
+		return nil, fmt.Errorf("failed to retrieve metadata: %w", err)
+	}
+
+	return value, nil
+}

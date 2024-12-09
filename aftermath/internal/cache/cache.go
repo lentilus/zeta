@@ -1,282 +1,173 @@
 package cache
 
 import (
-	"aftermath/internal/database"
+	"aftermath/internal/bibliography"
+	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
-	"aftermath/internal/utils"
-	"bytes"
+	con "context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
+	"log"
+
+	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-// FileMetadata holds the file path and its last modified timestamp.
-type FileMetadata struct {
-	Path         string
-	LastModified time.Time
-}
+type Document *parser.IncrementalParser
+type Reference *parser.Reference
 
-type ZettelUpdate struct {
-	metadata FileMetadata
-	zettel   database.Zettel
-}
-
-type Zettelkasten struct {
+// Store holds the data shared across all clients.
+// It manages long term caching.
+type Store struct {
 	root string
-	db   *database.DB
+	db   database.DB
+	bib  bibliography.Bibliography
 }
 
-func NewZettelkasten(root string, db *database.DB) *Zettelkasten {
-	return &Zettelkasten{root: root, db: db}
+func NewStore(root string) *Store {
+	// Todo generate database connection
+	// and bib from the root
+	// This should also start the incremental Indexing
+	return &Store{
+		root: root,
+		// db: todo
+		// bib: todo
+	}
 }
 
-// fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
-func fileNameFilter(name string) bool {
-	return name[len(name)-4:] == ".typ"
+// NewCache initializes a new Cache with all shared ressources.
+func (s *Store) NewCache() *Cache {
+	return &Cache{
+		db:   s.db,
+		bib:  s.bib,
+		docs: make(map[protocol.DocumentUri]Document),
+	}
 }
 
-// UpdateIncremental is the main function to set up the directory walking and processing routines.
-func (k *Zettelkasten) UpdateIncremental() error {
-	fileMetadataChan := make(chan FileMetadata, 10000)
-	var wg sync.WaitGroup
-
-	// Start directory walking
-	wg.Add(1)
-	go func() {
-		if err := k.findUpdates(fileMetadataChan, &wg); err != nil {
-			fmt.Printf("Error finding updates: %v\n", err)
-		}
-	}()
-
-	// Start metadata processing
-	wg.Add(1)
-	go func() {
-		walkDirectory(k.root, fileMetadataChan, &wg)
-		close(fileMetadataChan)
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-	return nil
+// Cache holds all the data for one client
+type Cache struct {
+	db   database.DB
+	bib  bibliography.Bibliography
+	docs map[string]Document
 }
 
-// walkDirectory walks through the directory, sending file metadata to a channel.
-func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			fmt.Printf("error accessing path %q: %v\n", path, err)
-			return nil
-		}
-
-		if !fileNameFilter(path) {
-			return nil
-		}
-		fileMetadataChan <- FileMetadata{
-			Path:         path,
-			LastModified: info.ModTime(),
-		}
-		return nil
-	})
-
+// OpenDocument initializes a new Document and returns its initial references.
+func (c *Cache) OpenDocument(identifier string, content []byte) ([]parser.Reference, error) {
+	// parse initial content
+	parser, err := parser.NewIncrementalParser(content)
 	if err != nil {
-		fmt.Printf("error walking the directory %q: %v\n", dir, err)
+		return nil, err
 	}
+
+	// store parser in docs
+	c.docs[identifier] = parser
+
+	// Returns initial references
+	return parser.GetReferences(), nil
 }
 
-// findUpdates reads file metadata from the channel and processes it.
-func (k *Zettelkasten) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
-	defer wg.Done()
+func (c *Cache) UpdateDocument(
+	identifier protocol.DocumentUri,
+	changes any,
+) ([]parser.Reference, error) {
+	log.Println("Updating document")
+	log.Printf("Type of changes received: %T", changes)
 
-	zettels, err := k.db.GetAll()
-	if err != nil {
-		return err
+	// Handle type assertion for changes manually in case it's not directly castable
+	contentChanges, ok := changes.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected changes format, expected a slice")
 	}
-	fmt.Printf("%d zettels stored in db\n", len(zettels))
 
-	processorChan := make(chan ZettelUpdate, 10000)
+	var parsedChanges []protocol.TextDocumentContentChangeEvent
+	for _, change := range contentChanges {
+		// Attempt to cast each change into the expected type
+		tChange, ok := change.(protocol.TextDocumentContentChangeEvent)
+		if !ok {
+			return nil, fmt.Errorf("invalid change type: %T", change)
+		}
+		parsedChanges = append(parsedChanges, tChange)
+	}
 
-	var processWg sync.WaitGroup
-	processWg.Add(1)
-	go k.processUpdates(processorChan, &processWg)
+	// Retrieve the document from the cache
+	doc, ok := c.docs[identifier]
+	if !ok {
+		return nil, fmt.Errorf("identifier %s not found in active documents", identifier)
+	}
 
-	for metadata := range fileMetadataChan {
-		z, exists := zettels[metadata.Path]
+	// Explicit type conversion from Document (which is *parser.IncrementalParser) to parser.IncrementalParser
+	var p *parser.IncrementalParser = doc
 
-		// Check if file has not changed
-		if exists {
-			delete(zettels, metadata.Path)
-			if z.LastUpdated >= metadata.LastModified.Unix() {
-				continue
-			}
+	// Process each change event and apply only incremental changes
+	for _, change := range parsedChanges {
+		// Ensure change has a valid range for incremental updates
+		if change.Range == nil {
+			continue // Skip changes that don't specify a range
 		}
 
-		processorChan <- ZettelUpdate{zettel: z, metadata: metadata}
-	}
-	close(processorChan)
+		// Map protocol change data into the DocumentChange type
+		docChange := parser.DocumentChange{
+			StartPos: p.CalculateOffset(parser.Position{
+				Line:      uint32(change.Range.Start.Line),
+				Character: uint32(change.Range.Start.Character),
+			}),
+			EndPos: p.CalculateOffset(parser.Position{
+				Line:      uint32(change.Range.End.Line),
+				Character: uint32(change.Range.End.Character),
+			}),
+			NewText:   []byte(change.Text),
+			IsPartial: true,
+		}
 
-	// Delete all zettels left in zettels (the deleted ones) from DB
-	var ids []int
-	for _, z := range zettels {
-		ids = append(ids, z.ID)
+		// Apply the change incrementally to the parser
+		log.Println("Applying Changes")
+		if err := p.ApplyChanges(con.Background(), []parser.DocumentChange{docChange}); err != nil {
+			return nil, fmt.Errorf("failed to apply incremental changes: %w", err)
+		}
 	}
-	k.db.DeleteZettels(ids)
 
-	processWg.Wait()
-	return nil
+	// Fetch references for diagnostics computation after updates
+	references := p.GetReferences()
+	return references, nil
 }
 
-func (k *Zettelkasten) processUpdates(
-	updateChan <-chan ZettelUpdate,
-	wg *sync.WaitGroup,
-) {
-	defer wg.Done()
-	parser := parser.NewParser()
-	defer parser.CloseParser()
+// CloseDocument frees all ressources associated with an open document
+func (c *Cache) CloseDocument(identifier string) {}
 
-	newLinks := make(map[string][]string)
+// Commit applies the references from Document to the shared store
+func (c *Cache) Commit(identifier string) {}
 
-	for u := range updateChan {
-		z := u.zettel
-		m := u.metadata
-
-		content, err := os.ReadFile(m.Path)
-		if err != nil {
-			fmt.Println("Error:", err)
-			continue
-		}
-
-		checksum := utils.ComputeChecksum(content)
-		if bytes.Equal(checksum, z.Checksum) {
-			fmt.Println("Nothing to do")
-			continue
-		}
-
-		refs, err := parser.GetReferences(content)
-		if err != nil {
-			fmt.Println("Error:", err)
-		} else {
-			newLinks[m.Path] = refs
-		}
-
-		err = k.db.UpsertZettel(
-			database.Zettel{
-				LastUpdated: m.LastModified.Unix(),
-				Path:        m.Path,
-				Checksum:    checksum,
-			},
-		)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
-	err := k.updateLinks(newLinks)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
-func (k *Zettelkasten) updateLinks(newLinks map[string][]string) error {
-	for z, refs := range newLinks {
-		err := k.db.DeleteLinks(z)
-		if err != nil {
-			return err
-		}
-		for _, ref := range refs {
-			link := ref2Link(ref, k.root)
-			err = k.db.CreateLink(z, link)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// UpdateOne processes a single Zettel file given its path.
-func (k *Zettelkasten) UpdateOne(path string) error {
-	// Check if file exists and get its info
-	fileInfo, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("error accessing file %q: %v", path, err)
-	}
-
-	// Check if it's a valid zettel file
-	if !fileNameFilter(path) {
-		return fmt.Errorf("file %q is not a valid zettel file", path)
-	}
-
-	// Create FileMetadata for the file
-	metadata := FileMetadata{
-		Path:         path,
-		LastModified: fileInfo.ModTime(),
-	}
-
-	// Get existing zettel from database if it exists
-	existingZettel, dberr := k.db.GetZettel(path)
-	if dberr != nil && dberr != database.ErrZettelNotFound {
-		return fmt.Errorf("error retrieving zettel from database: %v", dberr)
-	}
-
-	// Read file content
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("error reading file %q: %v", path, err)
-	}
-
-	// Compute checksum
-	checksum := utils.ComputeChecksum(content)
-
-	// If file hasn't changed, return early
-	if dberr != database.ErrZettelNotFound && bytes.Equal(checksum, existingZettel.Checksum) {
-		return nil
-	}
-
-	// Parse references
-	parser := parser.NewParser()
-	defer parser.CloseParser()
-
-	refs, err := parser.GetReferences(content)
-	if err != nil {
-		return fmt.Errorf("error parsing references: %v", err)
-	}
-
-	// Update zettel in database
-	err = k.db.UpsertZettel(
-		database.Zettel{
-			LastUpdated: metadata.LastModified.Unix(),
-			Path:        metadata.Path,
-			Checksum:    checksum,
+// Returns the referenced zettel at a given position in the Document
+func (c *Cache) ChildAt(identifier string, position protocol.Position) (protocol.Location, error) {
+	// Just a dummy implementation
+	return protocol.Location{
+		URI: "file:///home/lentilus/haha",
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: 0, Character: 1},
 		},
-	)
-	if err != nil {
-		return fmt.Errorf("error updating zettel in database: %v", err)
-	}
-
-	// Update links
-	err = k.db.DeleteLinks(path)
-	if err != nil {
-		return fmt.Errorf("error deleting old links: %v", err)
-	}
-
-	for _, ref := range refs {
-		link := ref2Link(ref, k.root)
-		err = k.db.CreateLink(path, link)
-		if err != nil {
-			return fmt.Errorf("error creating link: %v", err)
-		}
-	}
-
-	return nil
+	}, nil
 }
 
-func ref2Link(ref string, base string) string {
-	if len(ref) < 2 {
-		return ""
-	}
-	file := ref[1:] // remove @ref -> ref
-	return filepath.Join(base, file+".typ")
+// Index returns a list of all zettels,
+// compiled from the store and all documents
+func (c *Cache) Index() {}
+
+// Parents returns a list of all zettels linking to this one,
+// compiled from the store and all documents
+func (c *Cache) Parents(identifier string) ([]protocol.Location, error) {
+	return []protocol.Location{
+		{
+			URI: "file:///home/lentilus/haha",
+			Range: protocol.Range{
+				Start: protocol.Position{Line: 0, Character: 0},
+				End:   protocol.Position{Line: 0, Character: 1},
+			},
+		},
+		{
+			URI: "file:///home/lentilus/huhu",
+			Range: protocol.Range{
+				Start: protocol.Position{Line: 0, Character: 0},
+				End:   protocol.Position{Line: 0, Character: 1},
+			},
+		},
+	}, nil
 }

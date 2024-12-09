@@ -15,7 +15,8 @@ func main() {
 	commonlog.Configure(1, nil)
 
 	// Initialize the protocol handler with methods tied to the LanguageServer
-	server := lsp.NewServer()
+	server, _ := lsp.NewServer("/path/to/root")
 
-	server.RunTCP("127.0.0.1:1234")
+	panic(server.RunTCP("127.0.0.1:1234"))
+
 }

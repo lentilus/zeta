@@ -5,6 +5,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8Yc
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gorilla/websocket v1.5.1 h1:gmztn0JnHVt9JZquRuzLw3g4wouNVzKL15iLr/zn/QY=
 github.com/gorilla/websocket v1.5.1/go.mod h1:x3kM2JMyaluk02fnUJpQuwD2dCS5NDG2ZHL0uE0tcaY=
+github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
+github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/lucasb-eyer/go-colorful v1.2.0 h1:1nnpGOrhyZZuNyfu1QjKiUICQ74+3FNCN69Aj6K7nkY=
@@ -39,6 +41,8 @@ github.com/tliron/commonlog v0.2.19 h1:v1mOH1TyzFLqkshR03khw7ENAZPjAyZTQBQrqN+vX
 github.com/tliron/commonlog v0.2.19/go.mod h1:AcdhfcUqlAWukDrzTGyaPhUgYiNdZhS4dKzD/e0tjcY=
 github.com/tliron/glsp v0.2.2 h1:IKPfwpE8Lu8yB6Dayta+IyRMAbTVunudeauEgjXBt+c=
 github.com/tliron/glsp v0.2.2/go.mod h1:GMVWDNeODxHzmDPvYbYTCs7yHVaEATfYtXiYJ9w1nBg=
+github.com/tliron/glsp v0.2.3-0.20240808170048-d7cfc1c7abca h1:AAuTzDt8epq0AzuEzQEFV/ts5TkzY/OBeHihE+70XNI=
+github.com/tliron/glsp v0.2.3-0.20240808170048-d7cfc1c7abca/go.mod h1:0mr4+bYwGddJfGuaxnUZBSxkshSzFOIyTmBRvfJDBo4=
 github.com/tliron/kutil v0.3.26 h1:G+dicQLvzm3zdOMrrQFLBfHJXtk57fEu2kf1IFNyJxw=
 github.com/tliron/kutil v0.3.26/go.mod h1:1/HRVAb+fnRIRnzmhu0FPP+ZJKobrpwHStDVMuaXDzY=
 golang.org/x/crypto v0.26.0 h1:RrRspgV4mU+YwB4FYnuBoKsUapNIL5cohGAmSH3azsw=

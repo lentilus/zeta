@@ -3,10 +3,13 @@ package cache
 import (
 	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
+	"aftermath/internal/parser"
+	"fmt"
+
+	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-type Document struct {
-}
+type Document parser.IncrementalParser
 
 // Store holds the data shared across all clients.
 // It manages long term caching.
@@ -31,7 +34,7 @@ func (s *Store) NewCache() *Cache {
 	return &Cache{
 		db:   s.db,
 		bib:  s.bib,
-		docs: make(map[string]Document),
+		docs: make(map[protocol.DocumentUri]Document),
 	}
 }
 
@@ -42,22 +45,35 @@ type Cache struct {
 	docs map[string]Document
 }
 
-// UpsertDocument updates an existing docuemnt or inserts a new one
-func (c *Cache) UpsertDocument()
+// OpenDocument initializes a new Document and returns its initial references.
+func (c *Cache) OpenDocument(identifier string, content []byte) error {
+	parser, err := parser.NewIncrementalParser(content)
+	if err != nil {
+		return err
+	}
+
+	// TODO return refernces here
+	fmt.Println(parser.GetReferences())
+	return nil
+
+}
+
+// UpdateDocument updates an existing documents content and parses it.
+func (c *Cache) UpdateDocument() {}
 
 // CloseDocument frees all ressources associated with an open document
-func (c *Cache) CloseDocument()
+func (c *Cache) CloseDocument() {}
 
-// Commit writes applies the references from Document to the shared store
-func (c *Cache) Commit()
+// Commit applies the references from Document to the shared store
+func (c *Cache) Commit() {}
 
 // Returns the referenced zettel at a given position in the Document
-func (c *Cache) ChildAt()
+func (c *Cache) ChildAt() {}
 
 // Index returns a list of all zettels,
 // compiled from the store and all documents
-func (c *Cache) Index()
+func (c *Cache) Index() {}
 
 // Parents returns a list of all zettels linking to this one,
 // compiled from the store and all documents
-func (c *Cache) Parents()
+func (c *Cache) Parents() {}

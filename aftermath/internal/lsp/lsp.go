@@ -1,37 +1,51 @@
+// internal/lsp/server.go
 package lsp
 
 import (
-	"aftermath/internal/parser"
+	"aftermath/internal/cache"
+	"context"
+	"sync"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 
-const lsName = "aftermath"
+type clientIDKey struct{}
 
-var version string = "0.0.1"
-
-type LanguageServer struct {
-	state   string
+type Server struct {
+	store   *cache.Store
+	clients map[context.Context]*cache.Cache
+	mu      sync.RWMutex
 	handler protocol.Handler
-	parser  *parser.IncrementalParser
 }
 
-// NewServer initializes and returns a new LSP server instance.
-func NewServer() *server.Server {
-	ls := &LanguageServer{}
+func NewServer(root string) (*server.Server, error) {
+	store := cache.NewStore(root)
 
-	// Initialize the protocol handler
-	ls.handler = protocol.Handler{
-		Initialize:              ls.initialize,
-		Initialized:             ls.initialized,
-		Shutdown:                ls.shutdown,
-		SetTrace:                ls.setTrace,
-		WorkspaceExecuteCommand: ls.executeCommand,
-		TextDocumentDidChange:   ls.textDocumentDidChange,
-		TextDocumentDidOpen:     ls.textDocumentDidOpen,
+	ls := &Server{
+		store:   store,
+		clients: make(map[context.Context]*cache.Cache),
 	}
 
-	// Create the LSP server
-	return server.NewServer(&ls.handler, lsName, false)
+	ls.handler = protocol.Handler{
+		Initialize:          ls.initialize,
+		Initialized:         ls.initialized,
+		Shutdown:            ls.shutdown,
+		TextDocumentDidOpen: ls.textDocumentDidOpen,
+	}
+
+	return server.NewServer(&ls.handler, "aftermath", false), nil
+}
+
+func (s *Server) getOrCreateCache(ctx context.Context) *cache.Cache {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if client, exists := s.clients[ctx]; exists {
+		return client
+	}
+
+	client := s.store.NewCache()
+	s.clients[ctx] = client
+	return client
 }

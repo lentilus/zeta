@@ -22,13 +22,14 @@ func NewServer(root string) (*server.Server, error) {
 	}
 
 	ls.handler = &protocol.Handler{
-		Initialize:            ls.initialize,
-		Initialized:           ls.initialized,
-		TextDocumentDidOpen:   ls.textDocumentDidOpen,
-		TextDocumentDidChange: ls.textDocumentDidChange,
-		TextDocumentDidSave:   ls.textDocumentDidSave,
-		TextDocumentDidClose:  ls.textDocumentDidClose,
-		Shutdown:              ls.shutdown,
+		Initialize:             ls.initialize,
+		Initialized:            ls.initialized,
+		TextDocumentDidOpen:    ls.textDocumentDidOpen,
+		TextDocumentDidChange:  ls.textDocumentDidChange,
+		TextDocumentDidSave:    ls.textDocumentDidSave,
+		TextDocumentDidClose:   ls.textDocumentDidClose,
+		TextDocumentDefinition: ls.textDocumentDefinition,
+		Shutdown:               ls.shutdown,
 	}
 
 	return server.NewServer(ls.handler, "aftermath", false), nil

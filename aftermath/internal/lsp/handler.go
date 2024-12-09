@@ -40,7 +40,7 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	log.Println("DidOpen")
+	log.Printf("DidOpen: %s\n", params.TextDocument.URI)
 
 	refs, err := s.cache.OpenDocument(
 		string(params.TextDocument.URI),
@@ -89,6 +89,17 @@ func (s *Server) textDocumentDidClose(
 func (s *Server) shutdown(context *glsp.Context) error {
 	log.Println("Shutdown")
 	return nil
+}
+
+func (s *Server) textDocumentDefinition(
+	context *glsp.Context,
+	params *protocol.DefinitionParams,
+) (any, error) {
+	position, err := s.cache.ChildAt(params.TextDocument.URI, params.Position)
+	if err != nil {
+		return nil, err
+	}
+	return position, nil
 }
 
 func showReferenceDiagnostics(context *glsp.Context, uri string, references []parser.Reference) {

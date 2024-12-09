@@ -136,7 +136,16 @@ func (c *Cache) CloseDocument(identifier string) {}
 func (c *Cache) Commit(identifier string) {}
 
 // Returns the referenced zettel at a given position in the Document
-func (c *Cache) ChildAt() {}
+func (c *Cache) ChildAt(identifier string, position protocol.Position) (protocol.Location, error) {
+	// Just a dummy implementation
+	return protocol.Location{
+		URI: "file:///home/lentilus/haha",
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: 0, Character: 1},
+		},
+	}, nil
+}
 
 // Index returns a list of all zettels,
 // compiled from the store and all documents

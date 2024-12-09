@@ -4,6 +4,7 @@ import (
 	"aftermath/bindings"
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 
@@ -205,7 +206,7 @@ func (ip *IncrementalParser) ApplyChanges(ctx context.Context, changes []Documen
 	ip.content = newContent
 	ip.references = ip.parseReferences()
 
-	fmt.Printf("Entire Content:\n%s", ip.content)
+	log.Printf("Entire Content:\n%s", ip.content)
 
 	return nil
 }

@@ -4,12 +4,15 @@ import (
 	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
+	con "context"
+	"fmt"
 	"log"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-type Document parser.IncrementalParser
+type Document *parser.IncrementalParser
+type Reference *parser.Reference
 
 // Store holds the data shared across all clients.
 // It manages long term caching.
@@ -47,21 +50,84 @@ type Cache struct {
 }
 
 // OpenDocument initializes a new Document and returns its initial references.
-func (c *Cache) OpenDocument(identifier string, content []byte) error {
+func (c *Cache) OpenDocument(identifier string, content []byte) ([]parser.Reference, error) {
+	// parse initial content
 	parser, err := parser.NewIncrementalParser(content)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("Hello from OpenDocument")
-	log.Println("Initial References:")
-	log.Println(parser.GetReferences())
-	return nil
+	// store parser in docs
+	c.docs[identifier] = parser
 
+	// Returns initial references
+	return parser.GetReferences(), nil
 }
 
-// UpdateDocument updates an existing documents content and parses it.
-func (c *Cache) UpdateDocument() {}
+func (c *Cache) UpdateDocument(
+	identifier protocol.DocumentUri,
+	changes any,
+) ([]parser.Reference, error) {
+	log.Println("Updating document")
+	log.Printf("Type of changes received: %T", changes)
+
+	// Handle type assertion for changes manually in case it's not directly castable
+	contentChanges, ok := changes.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected changes format, expected a slice")
+	}
+
+	var parsedChanges []protocol.TextDocumentContentChangeEvent
+	for _, change := range contentChanges {
+		// Attempt to cast each change into the expected type
+		tChange, ok := change.(protocol.TextDocumentContentChangeEvent)
+		if !ok {
+			return nil, fmt.Errorf("invalid change type: %T", change)
+		}
+		parsedChanges = append(parsedChanges, tChange)
+	}
+
+	// Retrieve the document from the cache
+	doc, ok := c.docs[identifier]
+	if !ok {
+		return nil, fmt.Errorf("identifier %s not found in active documents", identifier)
+	}
+
+	// Explicit type conversion from Document (which is *parser.IncrementalParser) to parser.IncrementalParser
+	var p *parser.IncrementalParser = doc
+
+	// Process each change event and apply only incremental changes
+	for _, change := range parsedChanges {
+		// Ensure change has a valid range for incremental updates
+		if change.Range == nil {
+			continue // Skip changes that don't specify a range
+		}
+
+		// Map protocol change data into the DocumentChange type
+		docChange := parser.DocumentChange{
+			StartPos: p.CalculateOffset(parser.Position{
+				Line:      uint32(change.Range.Start.Line),
+				Character: uint32(change.Range.Start.Character),
+			}),
+			EndPos: p.CalculateOffset(parser.Position{
+				Line:      uint32(change.Range.End.Line),
+				Character: uint32(change.Range.End.Character),
+			}),
+			NewText:   []byte(change.Text),
+			IsPartial: true,
+		}
+
+		// Apply the change incrementally to the parser
+		log.Println("Applying Changes")
+		if err := p.ApplyChanges(con.Background(), []parser.DocumentChange{docChange}); err != nil {
+			return nil, fmt.Errorf("failed to apply incremental changes: %w", err)
+		}
+	}
+
+	// Fetch references for diagnostics computation after updates
+	references := p.GetReferences()
+	return references, nil
+}
 
 // CloseDocument frees all ressources associated with an open document
 func (c *Cache) CloseDocument(identifier string) {}

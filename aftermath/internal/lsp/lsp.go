@@ -29,6 +29,7 @@ func NewServer(root string) (*server.Server, error) {
 		TextDocumentDidSave:    ls.textDocumentDidSave,
 		TextDocumentDidClose:   ls.textDocumentDidClose,
 		TextDocumentDefinition: ls.textDocumentDefinition,
+		TextDocumentReferences: ls.textDocumentReferences,
 		Shutdown:               ls.shutdown,
 	}
 

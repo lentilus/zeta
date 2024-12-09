@@ -102,6 +102,17 @@ func (s *Server) textDocumentDefinition(
 	return position, nil
 }
 
+func (s *Server) textDocumentReferences(
+	context *glsp.Context,
+	params *protocol.ReferenceParams,
+) ([]protocol.Location, error) {
+	refs, err := s.cache.Parents(params.TextDocument.URI)
+	if err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
 func showReferenceDiagnostics(context *glsp.Context, uri string, references []parser.Reference) {
 	// Create a slice to hold the diagnostics
 	var diagnostics []protocol.Diagnostic

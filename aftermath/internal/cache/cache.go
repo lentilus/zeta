@@ -153,4 +153,21 @@ func (c *Cache) Index() {}
 
 // Parents returns a list of all zettels linking to this one,
 // compiled from the store and all documents
-func (c *Cache) Parents() {}
+func (c *Cache) Parents(identifier string) ([]protocol.Location, error) {
+	return []protocol.Location{
+		{
+			URI: "file:///home/lentilus/haha",
+			Range: protocol.Range{
+				Start: protocol.Position{Line: 0, Character: 0},
+				End:   protocol.Position{Line: 0, Character: 1},
+			},
+		},
+		{
+			URI: "file:///home/lentilus/huhu",
+			Range: protocol.Range{
+				Start: protocol.Position{Line: 0, Character: 0},
+				End:   protocol.Position{Line: 0, Character: 1},
+			},
+		},
+	}, nil
+}

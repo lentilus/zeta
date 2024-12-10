@@ -154,6 +154,10 @@ func (c *Cache) ChildAt(identifier string, position protocol.Position) (any, err
 		Column: position.Character,
 	})
 
+	if ref == nil {
+		return nil, nil
+	}
+
 	path, err := utils.Reference2Path(ref.Text, c.root)
 	if err != nil {
 		return nil, err

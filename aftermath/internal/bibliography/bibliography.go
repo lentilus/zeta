@@ -43,5 +43,6 @@ func (b *Bibliography) Regenerate(root string) error {
 		yamlData += Zettel2Yaml(z, root)
 	}
 
+	log.Println("Done with bib")
 	return os.WriteFile(b.Path, []byte(yamlData), 0644)
 }

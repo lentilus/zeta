@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log"
 	"path"
+	"strings"
+	"time"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -27,34 +29,53 @@ type Store struct {
 	scheduler *scheduler.Scheduler
 }
 
-func NewStore(root string) (*Store, error) {
+func NewStore(root string, sched *scheduler.Scheduler) (*Store, error) {
+	log.Println("Creating Store")
 	// Initialize database
-	db_path := path.Join(root, ".aftermath/index.sqlite")
+	db_path := path.Join(root, "./.aftermath/index.sqlite")
+	bib_path := path.Join(root, "./.aftermath/index.bib")
 	db, err := database.NewDB(db_path)
 	if err != nil {
+		log.Println("Errored at db")
 		return nil, err
 	}
 
 	// Initialize bibliography
-	// TODO
+	bib := &bibliography.Bibliography{
+		Path: bib_path,
+		DB:   db,
+	}
 
-	// Initialize sched
-	sched := scheduler.NewScheduler(16)
-	sched.RunScheduler()
-
-	return &Store{
+	store := &Store{
 		root:      root,
 		db:        db,
 		scheduler: sched,
-		// bib: todo
-	}, nil
+		bib:       bib,
+	}
+
+	task := scheduler.Task{
+		Name: "Incremental Update",
+		Execute: func() error {
+			err := store.UpdateIncremental()
+			if err != nil {
+				log.Println("Encountered error: %s", err)
+			}
+			log.Println("Done with Incremental Update")
+			return nil
+		},
+	}
+
+	sched.SchedulePeriodicTask(5*time.Minute, task)
+
+	return store, nil
 }
 
 // NewCache initializes a new Cache with all shared ressources.
 func (s *Store) NewCache() *Cache {
+	log.Println("Creating cache")
 	return &Cache{
-		db:   *s.db,
-		bib:  *s.bib,
+		db: *s.db,
+		// bib:  *s.bib,
 		root: s.root,
 		docs: make(map[protocol.DocumentUri]Document),
 	}
@@ -194,20 +215,24 @@ func (c *Cache) Index() {}
 // Parents returns a list of all zettels linking to this one,
 // compiled from the store and all documents
 func (c *Cache) Parents(identifier string) ([]protocol.Location, error) {
-	return []protocol.Location{
-		{
-			URI: "file:///home/lentilus/haha",
+	path := strings.TrimPrefix(identifier, "file://")
+	log.Printf("Path: %s", path)
+	zettels, err := (&c.db).GetBackLinks(path)
+	if err != nil {
+		log.Println("Error during get All Zettels")
+	}
+
+	var locations = []protocol.Location{}
+
+	for _, file := range zettels {
+		locations = append(locations, protocol.Location{
+			URI: "file://" + file,
 			Range: protocol.Range{
 				Start: protocol.Position{Line: 0, Character: 0},
 				End:   protocol.Position{Line: 0, Character: 1},
 			},
-		},
-		{
-			URI: "file:///home/lentilus/huhu",
-			Range: protocol.Range{
-				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: 0, Character: 1},
-			},
-		},
-	}, nil
+		})
+	}
+
+	return locations, nil
 }

@@ -16,12 +16,15 @@ func (s *Server) initialize(
 	root := *params.RootPath
 	log.Printf("Root is %s", root)
 
-	store, err := cache.NewStore(root)
+	store, err := cache.NewStore(root, s.scheduler)
 	if err != nil {
+		log.Printf("Error during Store creation: %s\n", err)
 		return nil, err
 	}
 
+	log.Println("Creating Cache")
 	s.cache = store.NewCache()
+	log.Println("Created Cache")
 	s.root = root
 
 	capabilities := s.handler.CreateServerCapabilities()
@@ -33,6 +36,7 @@ func (s *Server) initialize(
 		Save:      true,
 	}
 
+	log.Println("Returning from initialize")
 	return protocol.InitializeResult{
 		Capabilities: capabilities,
 	}, nil

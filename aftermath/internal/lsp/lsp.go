@@ -3,19 +3,23 @@ package lsp
 
 import (
 	"aftermath/internal/cache"
+	"aftermath/internal/scheduler"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 
 type Server struct {
-	root    string
-	cache   *cache.Cache
-	handler *protocol.Handler
+	root      string
+	cache     *cache.Cache
+	handler   *protocol.Handler
+	scheduler *scheduler.Scheduler
 }
 
-func NewServer(root string) (*server.Server, error) {
-	ls := &Server{}
+func NewServer(sched *scheduler.Scheduler) (*server.Server, error) {
+	ls := &Server{
+		scheduler: sched,
+	}
 	ls.handler = &protocol.Handler{
 		Initialize:             ls.initialize,
 		Initialized:            ls.initialized,

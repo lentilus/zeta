@@ -4,10 +4,12 @@ import (
 	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
+	"aftermath/internal/scheduler"
 	"aftermath/internal/utils"
 	con "context"
 	"fmt"
 	"log"
+	"path"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -19,27 +21,40 @@ type Reference *parser.Reference
 // Store holds the data shared across all clients.
 // It manages long term caching.
 type Store struct {
-	root string
-	db   database.DB
-	bib  bibliography.Bibliography
+	root      string
+	db        *database.DB
+	bib       *bibliography.Bibliography
+	scheduler *scheduler.Scheduler
 }
 
-func NewStore(root string) *Store {
-	// Todo generate database connection
-	// and bib from the root
-	// This should also start the incremental Indexing
-	return &Store{
-		root: root,
-		// db: todo
-		// bib: todo
+func NewStore(root string) (*Store, error) {
+	// Initialize database
+	db_path := path.Join(root, ".aftermath/index.sqlite")
+	db, err := database.NewDB(db_path)
+	if err != nil {
+		return nil, err
 	}
+
+	// Initialize bibliography
+	// TODO
+
+	// Initialize sched
+	sched := scheduler.NewScheduler(16)
+	sched.RunScheduler()
+
+	return &Store{
+		root:      root,
+		db:        db,
+		scheduler: sched,
+		// bib: todo
+	}, nil
 }
 
 // NewCache initializes a new Cache with all shared ressources.
 func (s *Store) NewCache() *Cache {
 	return &Cache{
-		db:   s.db,
-		bib:  s.bib,
+		db:   *s.db,
+		bib:  *s.bib,
 		root: s.root,
 		docs: make(map[protocol.DocumentUri]Document),
 	}

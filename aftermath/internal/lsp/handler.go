@@ -16,7 +16,11 @@ func (s *Server) initialize(
 	root := *params.RootPath
 	log.Printf("Root is %s", root)
 
-	store := cache.NewStore(root)
+	store, err := cache.NewStore(root)
+	if err != nil {
+		return nil, err
+	}
+
 	s.cache = store.NewCache()
 	s.root = root
 

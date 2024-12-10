@@ -1,4 +1,4 @@
-package store_test
+package cache_test
 
 import (
 	"aftermath/internal/bibliography"

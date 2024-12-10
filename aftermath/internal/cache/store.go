@@ -1,11 +1,11 @@
-package store
+package cache
 
 import (
-	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"aftermath/internal/utils"
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -25,27 +25,13 @@ type ZettelUpdate struct {
 	zettel   database.Zettel
 }
 
-type ZettelStore struct {
-	root string
-	db   *database.DB
-	bib  *bibliography.Bibliography
-}
-
-func NewZettelStore(
-	root string,
-	db *database.DB,
-	bib *bibliography.Bibliography,
-) *ZettelStore {
-	return &ZettelStore{root: root, db: db, bib: bib}
-}
-
 // fileNameFilter takes a filename and returns true if it is a zettel, false if it is not.
 func fileNameFilter(name string) bool {
 	return name[len(name)-4:] == ".typ"
 }
 
 // UpdateIncremental is the main function to set up the directory walking and processing routines.
-func (k *ZettelStore) UpdateIncremental() error {
+func (k *Store) UpdateIncremental() error {
 	fileMetadataChan := make(chan FileMetadata, 10000)
 	var wg sync.WaitGroup
 
@@ -100,7 +86,7 @@ func walkDirectory(dir string, fileMetadataChan chan<- FileMetadata, wg *sync.Wa
 }
 
 // findUpdates reads file metadata from the channel and processes it.
-func (k *ZettelStore) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
+func (k *Store) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	zettels, err := k.db.GetAll()
@@ -140,7 +126,7 @@ func (k *ZettelStore) findUpdates(fileMetadataChan <-chan FileMetadata, wg *sync
 	return nil
 }
 
-func (k *ZettelStore) processUpdates(
+func (k *Store) processUpdates(
 	updateChan <-chan ZettelUpdate,
 	wg *sync.WaitGroup,
 ) {
@@ -167,7 +153,7 @@ func (k *ZettelStore) processUpdates(
 			continue
 		}
 
-		refs, err := parser.GetReferences(content)
+		refs, err := parser.GetReferences(context.Background(), content)
 		if err != nil {
 			fmt.Println("Error:", err)
 		} else {
@@ -199,7 +185,7 @@ func (k *ZettelStore) processUpdates(
 	}
 }
 
-func (k *ZettelStore) updateLinks(newLinks map[string][]string) error {
+func (k *Store) updateLinks(newLinks map[string][]string) error {
 	for z, refs := range newLinks {
 		err := k.db.DeleteLinks(z)
 		if err != nil {
@@ -217,7 +203,7 @@ func (k *ZettelStore) updateLinks(newLinks map[string][]string) error {
 }
 
 // UpdateOne processes a single Zettel file given its path.
-func (k *ZettelStore) UpdateOne(path string) error {
+func (k *Store) UpdateOne(path string) error {
 	// Check if file exists and get its info
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -259,7 +245,7 @@ func (k *ZettelStore) UpdateOne(path string) error {
 	parser := parser.NewOneTimeParser()
 	defer parser.CloseParser()
 
-	refs, err := parser.GetReferences(content)
+	refs, err := parser.GetReferences(context.Background(), content)
 	if err != nil {
 		return fmt.Errorf("error parsing references: %v", err)
 	}

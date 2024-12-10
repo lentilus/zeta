@@ -9,7 +9,7 @@ import (
 
 func showReferenceDiagnostics(context *glsp.Context, uri string, references []parser.Reference) {
 	// Create a slice to hold the diagnostics
-	var diagnostics []protocol.Diagnostic
+	diagnostics := []protocol.Diagnostic{}
 	severity := protocol.DiagnosticSeverityInformation
 
 	// Convert each reference into a protocol.Diagnostic

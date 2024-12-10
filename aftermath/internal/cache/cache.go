@@ -4,10 +4,12 @@ import (
 	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
+	"aftermath/internal/utils"
 	con "context"
 	"fmt"
 	"log"
 
+	sitter "github.com/smacker/go-tree-sitter"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
@@ -38,6 +40,7 @@ func (s *Store) NewCache() *Cache {
 	return &Cache{
 		db:   s.db,
 		bib:  s.bib,
+		root: s.root,
 		docs: make(map[protocol.DocumentUri]Document),
 	}
 }
@@ -46,6 +49,7 @@ func (s *Store) NewCache() *Cache {
 type Cache struct {
 	db   database.DB
 	bib  bibliography.Bibliography
+	root string
 	docs map[string]Document
 }
 
@@ -136,10 +140,27 @@ func (c *Cache) CloseDocument(identifier string) {}
 func (c *Cache) Commit(identifier string) {}
 
 // Returns the referenced zettel at a given position in the Document
-func (c *Cache) ChildAt(identifier string, position protocol.Position) (protocol.Location, error) {
+// returns protocol.Position or nil
+func (c *Cache) ChildAt(identifier string, position protocol.Position) (any, error) {
 	// Just a dummy implementation
+	doc, ok := c.docs[identifier]
+	if !ok {
+		return nil, fmt.Errorf("identifier %s not found in active documents", identifier)
+	}
+
+	var p *parser.IncrementalParser = doc
+	ref := p.GetReferenceAt(sitter.Point{
+		Row:    position.Line,
+		Column: position.Character,
+	})
+
+	path, err := utils.Reference2Path(ref.Text, c.root)
+	if err != nil {
+		return nil, err
+	}
+
 	return protocol.Location{
-		URI: "file:///home/lentilus/haha",
+		URI: "file://" + path,
 		Range: protocol.Range{
 			Start: protocol.Position{Line: 0, Character: 0},
 			End:   protocol.Position{Line: 0, Character: 1},

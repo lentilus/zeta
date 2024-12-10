@@ -2,6 +2,7 @@
 package lsp
 
 import (
+	"aftermath/internal/cache"
 	"log"
 
 	"github.com/tliron/glsp"
@@ -12,7 +13,13 @@ func (s *Server) initialize(
 	context *glsp.Context,
 	params *protocol.InitializeParams,
 ) (any, error) {
-	log.Printf("Root is %s", params.RootURI)
+	root := *params.RootPath
+	log.Printf("Root is %s", root)
+
+	store := cache.NewStore(root)
+	s.cache = store.NewCache()
+	s.root = root
+
 	capabilities := s.handler.CreateServerCapabilities()
 
 	syncKind := protocol.TextDocumentSyncKindIncremental

@@ -9,18 +9,13 @@ import (
 )
 
 type Server struct {
+	root    string
 	cache   *cache.Cache
 	handler *protocol.Handler
 }
 
 func NewServer(root string) (*server.Server, error) {
-	store := cache.NewStore(root)
-	cache := store.NewCache()
-
-	ls := &Server{
-		cache: cache,
-	}
-
+	ls := &Server{}
 	ls.handler = &protocol.Handler{
 		Initialize:             ls.initialize,
 		Initialized:            ls.initialized,

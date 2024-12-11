@@ -1,11 +1,9 @@
-// internal/lsp/server.go
+// internal/lsp/lsp.go
 package lsp
 
 import (
 	"aftermath/internal/cache/memory"
-	"aftermath/internal/scheduler"
-
-	protocol "github.com/tliron/glsp/protocol_3_16"
+	"github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 
@@ -13,13 +11,11 @@ type Server struct {
 	root       string
 	docManager memory.DocumentManager
 	handler    *protocol.Handler
-	scheduler  *scheduler.Scheduler
 }
 
-func NewServer(sched *scheduler.Scheduler) (*server.Server, error) {
-	ls := &Server{
-		scheduler: sched,
-	}
+func NewServer() (*server.Server, error) {
+	ls := &Server{}
+
 	ls.handler = &protocol.Handler{
 		Initialize:             ls.initialize,
 		Initialized:            ls.initialized,

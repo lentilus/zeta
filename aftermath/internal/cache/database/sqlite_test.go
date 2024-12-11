@@ -1,7 +1,7 @@
 package database_test
 
 import (
-	"aftermath/internal/cache/store/sqlite/database"
+	"aftermath/internal/cache/database"
 	"fmt"
 	"os"
 	"path/filepath"

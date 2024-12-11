@@ -66,7 +66,7 @@ func (s *Server) textDocumentDidOpen(
 		return fmt.Errorf("failed to open document: %w", err)
 	}
 
-	showReferenceDiagnostics(context, uri, doc.GetReferences())
+	s.showReferenceDiagnostics(context, uri, doc.GetReferences())
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (s *Server) textDocumentDidChange(
 		return fmt.Errorf("failed to apply changes: %w", err)
 	}
 
-	showReferenceDiagnostics(context, uri, doc.GetReferences())
+	s.showReferenceDiagnostics(context, uri, doc.GetReferences())
 	return nil
 }
 
@@ -132,6 +132,9 @@ func (s *Server) textDocumentDidClose(
 ) error {
 	path := URIToPath(params.TextDocument.URI)
 	log.Printf("Closed %s", path)
+
+	// Clear diagnostics cache for closed documents
+	delete(s.diagnosticCache, params.TextDocument.URI)
 
 	if err := s.docManager.CloseDocument(path); err != nil {
 		return fmt.Errorf("failed to close document: %w", err)

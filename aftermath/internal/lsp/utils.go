@@ -2,13 +2,14 @@ package lsp
 
 import (
 	"aftermath/internal/cache/memory"
+	"reflect"
 	"strings"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-func showReferenceDiagnostics(context *glsp.Context, uri string, references []memory.Reference) {
+func (s *Server) showReferenceDiagnostics(context *glsp.Context, uri string, references []memory.Reference) {
 	diagnostics := make([]protocol.Diagnostic, len(references))
 	severity := protocol.DiagnosticSeverityInformation
 
@@ -29,6 +30,15 @@ func showReferenceDiagnostics(context *glsp.Context, uri string, references []me
 		}
 	}
 
+	// Check if diagnostics have changed
+	if previous, exists := s.diagnosticCache[uri]; exists {
+		if reflect.DeepEqual(previous, diagnostics) {
+			return // Skip publishing if diagnostics haven't changed
+		}
+	}
+
+	// Update cache and publish new diagnostics
+	s.diagnosticCache[uri] = diagnostics
 	params := protocol.PublishDiagnosticsParams{
 		URI:         uri,
 		Diagnostics: diagnostics,

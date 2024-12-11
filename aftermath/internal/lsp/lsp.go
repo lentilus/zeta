@@ -1,4 +1,3 @@
-// internal/lsp/lsp.go
 package lsp
 
 import (
@@ -8,13 +7,16 @@ import (
 )
 
 type Server struct {
-	root       string
-	docManager memory.DocumentManager
-	handler    *protocol.Handler
+	root            string
+	docManager      memory.DocumentManager
+	handler         *protocol.Handler
+	diagnosticCache map[string][]protocol.Diagnostic // Add this line
 }
 
 func NewServer() (*server.Server, error) {
-	ls := &Server{}
+	ls := &Server{
+		diagnosticCache: make(map[string][]protocol.Diagnostic), // Initialize the cache
+	}
 
 	ls.handler = &protocol.Handler{
 		Initialize:             ls.initialize,

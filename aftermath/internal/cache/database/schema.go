@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 func initSchema(db *sql.DB) error {
 	// Check schema version
@@ -43,7 +43,8 @@ func createTables(tx *sql.Tx) error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS files (
             path TEXT PRIMARY KEY,
-            last_modified INTEGER NOT NULL
+            last_modified INTEGER NOT NULL,
+            file_exists INTEGER NOT NULL DEFAULT 1
         )`,
 		`CREATE TABLE IF NOT EXISTS links (
             source_path TEXT NOT NULL,

@@ -93,10 +93,11 @@ func (db *SQLiteDB) GetAllFiles() ([]FileRecord, error) {
 
 func (db *SQLiteDB) UpsertFile(file *FileRecord) error {
 	result, err := db.db.Exec(`
-        INSERT INTO files (path, last_modified)
-        VALUES (?, ?)
+        INSERT INTO files (path, last_modified, file_exists)
+        VALUES (?, ?, 1)
         ON CONFLICT(path) DO UPDATE SET
-            last_modified = excluded.last_modified
+            last_modified = excluded.last_modified,
+            file_exists = 1
     `, file.Path, file.LastModified)
 
 	if err != nil {
@@ -197,6 +198,9 @@ func (db *SQLiteDB) Clear() error {
 }
 
 func (db *SQLiteDB) Close() error {
+	if _, err := db.db.Exec("DELETE FROM files WHERE file_exists = 0"); err != nil {
+		return fmt.Errorf("failed to clean up non-existent files: %w", err)
+	}
 	return db.db.Close()
 }
 

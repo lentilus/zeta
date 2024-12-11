@@ -44,6 +44,10 @@ type DocumentManager interface {
 	CloseDocument(path string) error
 	CommitDocument(path string) error
 
+	// Queries
+	GetAllPaths() ([]string, error)
+	GetParents(path string) ([]string, error)
+
 	// Bulk operations
 	CloseAll() error
 }

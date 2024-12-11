@@ -2,11 +2,13 @@ package sqlite
 
 import (
 	"aftermath/internal/cache/database"
+	"aftermath/internal/parser"
 	"fmt"
 )
 
 type SQLiteStore struct {
 	db       database.Database
+	parser   parser.SimpleParser
 	rootPath string
 }
 
@@ -16,9 +18,15 @@ func NewSQLiteStore(config Config) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
 
+	simpleParser, err := parser.NewOneTimeParser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create parser: %w", err)
+	}
+
 	return &SQLiteStore{
 		db:       db,
 		rootPath: config.RootPath,
+		parser:   simpleParser,
 	}, nil
 }
 

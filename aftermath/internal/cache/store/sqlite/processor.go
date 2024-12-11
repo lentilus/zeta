@@ -2,15 +2,24 @@ package sqlite
 
 import (
 	"aftermath/internal/cache/database"
+	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 	"sync"
 )
 
 func (s *SQLiteStore) processFile(file *FileInfo) error {
-	links, err := parseLinks(file.Content)
+	// Use the parser to extract links from the content
+	refs, err := s.parser.ParseReferences(context.Background(), file.Content)
 	if err != nil {
 		return fmt.Errorf("failed to parse links: %w", err)
+	}
+
+	// Convert references to string links if necessary
+	links := make([]string, len(refs))
+	for i, ref := range refs {
+		links[i] = filepath.Join(s.rootPath, ref+".typ")
 	}
 
 	return s.db.WithTx(func(tx database.Transaction) error {

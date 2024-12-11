@@ -20,7 +20,7 @@ func (s *Server) initialize(
 	log.Printf("Root is %s", root)
 
 	// Initialize SQLite database
-	dbPath := filepath.Join(root, ".aftermath.db")
+	dbPath := filepath.Join(root, ".aftermath/store.db")
 	db, err := database.NewSQLiteDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)

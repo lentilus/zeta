@@ -1,12 +1,12 @@
-package store_test
+package dummy_test
 
 import (
-	"aftermath/internal/cache/store"
+	"aftermath/internal/cache/store/dummy"
 	"testing"
 )
 
 func TestDummyStore(t *testing.T) {
-	store := store.NewDummyStore()
+	store := dummy.NewDummyStore()
 
 	// Test GetAll
 	paths, err := store.GetAll()

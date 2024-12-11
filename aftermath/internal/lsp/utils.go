@@ -25,7 +25,7 @@ func showReferenceDiagnostics(context *glsp.Context, uri string, references []me
 				},
 			},
 			Severity: &severity,
-			Message:  "Reference to: " + ref.Target,
+			Message:  "> " + ref.Target,
 		}
 	}
 

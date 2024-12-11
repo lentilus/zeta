@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
@@ -15,15 +14,9 @@ func main() {
 	// Set up logging
 	commonlog.Configure(1, nil)
 
-	// Create logs directory if it doesn't exist
-	logsDir := filepath.Join(os.TempDir(), "aftermath")
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		log.Fatalf("Failed to create logs directory: %v", err)
-	}
-
 	// Open log file
 	logFile, err := os.OpenFile(
-		filepath.Join(logsDir, "aftermath.log"),
+		"/tmp/aftermath.log",
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
 		0666,
 	)

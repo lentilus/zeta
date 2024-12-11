@@ -4,6 +4,8 @@ import (
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"fmt"
+	"log"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -11,13 +13,15 @@ import (
 type SQLiteDocumentManager struct {
 	db   database.Database
 	docs map[string]Document
+	root string
 	mu   sync.RWMutex
 }
 
-func NewSQLiteDocumentManager(db database.Database) *SQLiteDocumentManager {
+func NewSQLiteDocumentManager(db database.Database, root string) *SQLiteDocumentManager {
 	return &SQLiteDocumentManager{
 		db:   db,
 		docs: make(map[string]Document),
+		root: root,
 	}
 }
 
@@ -53,6 +57,7 @@ func (m *SQLiteDocumentManager) GetDocument(path string) (Document, bool) {
 	return doc, exists
 }
 
+// CommitDocument updates the document and its references in the database
 func (m *SQLiteDocumentManager) CommitDocument(path string) error {
 	m.mu.RLock()
 	doc, exists := m.docs[path]
@@ -66,7 +71,8 @@ func (m *SQLiteDocumentManager) CommitDocument(path string) error {
 	refs := doc.GetReferences()
 	targets := make([]string, len(refs))
 	for i, ref := range refs {
-		targets[i] = ref.Target
+		// Use path.Join to prepend root path to each reference target
+		targets[i] = filepath.Join(m.root, ref.Target)
 	}
 
 	// Update database
@@ -152,10 +158,12 @@ func (m *SQLiteDocumentManager) GetAllPaths() ([]string, error) {
 	return result, nil
 }
 
+// GetParents retrieves the parent paths of the given document path
 func (m *SQLiteDocumentManager) GetParents(path string) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	log.Printf("Getting Backlinks to %s from db", path)
 	// Get parents from database
 	records, err := m.db.GetBacklinks(path)
 	if err != nil && err != database.ErrNotFound {
@@ -171,7 +179,7 @@ func (m *SQLiteDocumentManager) GetParents(path string) ([]string, error) {
 	// Add parents from memory
 	for docPath, doc := range m.docs {
 		for _, ref := range doc.GetReferences() {
-			if ref.Target == path {
+			if filepath.Join(m.root, ref.Target) == path {
 				parents[docPath] = struct{}{}
 			}
 		}

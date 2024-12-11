@@ -27,7 +27,7 @@ func (s *Server) initialize(
 	}
 
 	// Create document manager
-	s.docManager = memory.NewSQLiteDocumentManager(db)
+	s.docManager = memory.NewSQLiteDocumentManager(db, root)
 	s.root = root
 
 	capabilities := s.handler.CreateServerCapabilities()
@@ -57,7 +57,7 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	uri := string(params.TextDocument.URI)
+	uri := params.TextDocument.URI
 	path := URIToPath(uri)
 	log.Printf("DidOpen: %s\n", path)
 
@@ -74,7 +74,7 @@ func (s *Server) textDocumentDidChange(
 	context *glsp.Context,
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
-	uri := string(params.TextDocument.URI)
+	uri := params.TextDocument.URI
 	path := URIToPath(uri)
 
 	doc, exists := s.docManager.GetDocument(path)
@@ -117,7 +117,7 @@ func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
-	path := URIToPath(string(params.TextDocument.URI))
+	path := URIToPath(params.TextDocument.URI)
 	log.Printf("DidSave: %s\n", path)
 
 	if err := s.docManager.CommitDocument(path); err != nil {
@@ -130,7 +130,7 @@ func (s *Server) textDocumentDidClose(
 	context *glsp.Context,
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
-	path := URIToPath(string(params.TextDocument.URI))
+	path := URIToPath(params.TextDocument.URI)
 	log.Printf("Closed %s", path)
 
 	if err := s.docManager.CloseDocument(path); err != nil {
@@ -148,7 +148,7 @@ func (s *Server) textDocumentDefinition(
 	context *glsp.Context,
 	params *protocol.DefinitionParams,
 ) (any, error) {
-	path := URIToPath(string(params.TextDocument.URI))
+	path := URIToPath(params.TextDocument.URI)
 	doc, exists := s.docManager.GetDocument(path)
 	if !exists {
 		return nil, fmt.Errorf("document not found: %s", path)
@@ -164,7 +164,7 @@ func (s *Server) textDocumentDefinition(
 	}
 
 	// Convert target to URI
-	targetPath := filepath.Join(s.root, ref.Target+".md")
+	targetPath := filepath.Join(s.root, ref.Target)
 	return protocol.Location{
 		URI: PathToURI(targetPath),
 		Range: protocol.Range{
@@ -178,7 +178,8 @@ func (s *Server) textDocumentReferences(
 	context *glsp.Context,
 	params *protocol.ReferenceParams,
 ) ([]protocol.Location, error) {
-	path := string(params.TextDocument.URI)
+	path := URIToPath(params.TextDocument.URI)
+	log.Printf("Finding Parents of: %s", path)
 	parents, err := s.docManager.GetParents(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parents: %w", err)

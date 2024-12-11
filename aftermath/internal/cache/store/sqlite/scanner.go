@@ -39,7 +39,7 @@ func scanDirectory(root string) ([]*FileInfo, error) {
 			return err
 		}
 
-		if !info.IsDir() && filepath.Ext(path) == ".md" {
+		if !info.IsDir() && filepath.Ext(path) == ".typ" {
 			fileInfo, err := scanFile(path)
 			if err != nil {
 				log.Printf("Failed to scan file %s: %v", path, err)

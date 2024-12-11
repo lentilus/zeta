@@ -1,9 +1,10 @@
 package parser
 
 import (
-	sitter "github.com/smacker/go-tree-sitter"
 	"regexp"
 	"strings"
+
+	sitter "github.com/smacker/go-tree-sitter"
 )
 
 var (
@@ -29,7 +30,7 @@ func processReferenceTarget(content string) string {
 	// Replace colons with forward slashes
 	target = strings.ReplaceAll(target, ":", "/")
 
-	return target
+	return target + ".typ"
 }
 
 func convertPosition(pos Position) sitter.Point {

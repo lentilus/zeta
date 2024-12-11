@@ -42,6 +42,7 @@ type DocumentManager interface {
 	OpenDocument(path string, content string) (Document, error)
 	GetDocument(path string) (Document, bool)
 	CloseDocument(path string) error
+	CommitDocument(path string) error
 
 	// Bulk operations
 	CloseAll() error

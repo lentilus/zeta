@@ -134,6 +134,10 @@ func (m *DummyManager) GetDocument(path string) (Document, bool) {
 	return doc, exists
 }
 
+func (m *DummyManager) CommitDocument(path string) error {
+	return nil
+}
+
 func (m *DummyManager) CloseDocument(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

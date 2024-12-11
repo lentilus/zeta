@@ -10,25 +10,25 @@ import (
 type DummyStore struct {
 	// links stores the relationships between zettels
 	// map[source][]target for forward links
-	links map[Path][]Path
+	links map[string][]string
 	// reverseLinks stores backward references
 	// map[target][]source for backward links
-	reverseLinks map[Path][]Path
+	reverseLinks map[string][]string
 	// lastUpdate tracks when each zettel was last updated
-	lastUpdate map[Path]time.Time
+	lastUpdate map[string]time.Time
 	mu         sync.RWMutex
 }
 
 // NewDummyStore creates a new DummyStore with some sample data
 func NewDummyStore() *DummyStore {
 	store := &DummyStore{
-		links:        make(map[Path][]Path),
-		reverseLinks: make(map[Path][]Path),
-		lastUpdate:   make(map[Path]time.Time),
+		links:        make(map[string][]string),
+		reverseLinks: make(map[string][]string),
+		lastUpdate:   make(map[string]time.Time),
 	}
 
 	// Add some sample data
-	samplePaths := []Path{
+	samplePaths := []string{
 		"zettel1.typ",
 		"zettel2.typ",
 		"zettel3.typ",
@@ -37,9 +37,9 @@ func NewDummyStore() *DummyStore {
 	}
 
 	// Create some sample relationships
-	store.links[samplePaths[0]] = []Path{samplePaths[1], samplePaths[2]}
-	store.links[samplePaths[1]] = []Path{samplePaths[2], samplePaths[3]}
-	store.links[samplePaths[2]] = []Path{samplePaths[4]}
+	store.links[samplePaths[0]] = []string{samplePaths[1], samplePaths[2]}
+	store.links[samplePaths[1]] = []string{samplePaths[2], samplePaths[3]}
+	store.links[samplePaths[2]] = []string{samplePaths[4]}
 
 	// Build reverse links
 	for source, targets := range store.links {
@@ -58,7 +58,7 @@ func NewDummyStore() *DummyStore {
 }
 
 // UpdateOne simulates updating a single zettel
-func (s *DummyStore) UpdateOne(path Path) error {
+func (s *DummyStore) UpdateOne(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -98,7 +98,7 @@ func (s *DummyStore) Recompute() error {
 	time.Sleep(1 * time.Second)
 
 	// Clear and rebuild reverse links
-	s.reverseLinks = make(map[Path][]Path)
+	s.reverseLinks = make(map[string][]string)
 	for source, targets := range s.links {
 		for _, target := range targets {
 			s.reverseLinks[target] = append(s.reverseLinks[target], source)
@@ -108,11 +108,11 @@ func (s *DummyStore) Recompute() error {
 }
 
 // GetAll returns all zettel paths
-func (s *DummyStore) GetAll() ([]Path, error) {
+func (s *DummyStore) GetAll() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	paths := make([]Path, 0, len(s.lastUpdate))
+	paths := make([]string, 0, len(s.lastUpdate))
 	for path := range s.lastUpdate {
 		paths = append(paths, path)
 	}
@@ -120,7 +120,7 @@ func (s *DummyStore) GetAll() ([]Path, error) {
 }
 
 // GetParents returns all zettels that link to the given path
-func (s *DummyStore) GetParents(path Path) ([]Path, error) {
+func (s *DummyStore) GetParents(path string) ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -128,13 +128,13 @@ func (s *DummyStore) GetParents(path Path) ([]Path, error) {
 		return nil, fmt.Errorf("zettel not found: %s", path)
 	}
 
-	parents := make([]Path, len(s.reverseLinks[path]))
+	parents := make([]string, len(s.reverseLinks[path]))
 	copy(parents, s.reverseLinks[path])
 	return parents, nil
 }
 
 // GetChildren returns all zettels that the given path links to
-func (s *DummyStore) GetChildren(path Path) ([]Path, error) {
+func (s *DummyStore) GetChildren(path string) ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -142,7 +142,7 @@ func (s *DummyStore) GetChildren(path Path) ([]Path, error) {
 		return nil, fmt.Errorf("zettel not found: %s", path)
 	}
 
-	children := make([]Path, len(s.links[path]))
+	children := make([]string, len(s.links[path]))
 	copy(children, s.links[path])
 	return children, nil
 }

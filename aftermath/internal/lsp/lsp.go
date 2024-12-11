@@ -2,7 +2,7 @@
 package lsp
 
 import (
-	"aftermath/internal/cache"
+	"aftermath/internal/cache/memory"
 	"aftermath/internal/scheduler"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -10,10 +10,10 @@ import (
 )
 
 type Server struct {
-	root      string
-	cache     *cache.Cache
-	handler   *protocol.Handler
-	scheduler *scheduler.Scheduler
+	root       string
+	docManager memory.DocumentManager
+	handler    *protocol.Handler
+	scheduler  *scheduler.Scheduler
 }
 
 func NewServer(sched *scheduler.Scheduler) (*server.Server, error) {

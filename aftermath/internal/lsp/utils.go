@@ -1,42 +1,55 @@
 package lsp
 
 import (
-	"aftermath/internal/parser"
+	"aftermath/internal/cache/memory"
+	"strings"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-func showReferenceDiagnostics(context *glsp.Context, uri string, references []parser.Reference) {
-	// Create a slice to hold the diagnostics
-	diagnostics := []protocol.Diagnostic{}
+func showReferenceDiagnostics(context *glsp.Context, uri string, references []memory.Reference) {
+	diagnostics := make([]protocol.Diagnostic, len(references))
 	severity := protocol.DiagnosticSeverityInformation
 
-	// Convert each reference into a protocol.Diagnostic
-	for _, ref := range references {
-		diagnostic := protocol.Diagnostic{
+	for i, ref := range references {
+		diagnostics[i] = protocol.Diagnostic{
 			Range: protocol.Range{
 				Start: protocol.Position{
-					Line:      uint32(ref.Range.StartPoint.Row),
-					Character: uint32(ref.Range.StartPoint.Column),
+					Line:      ref.Range.Start.Line,
+					Character: ref.Range.Start.Character,
 				},
 				End: protocol.Position{
-					Line:      uint32(ref.Range.EndPoint.Row),
-					Character: uint32(ref.Range.EndPoint.Column),
+					Line:      ref.Range.End.Line,
+					Character: ref.Range.End.Character,
 				},
 			},
-			Severity: &severity,         // Set the severity as Information
-			Message:  "REF " + ref.Text, // Custom message based on the reference's text
+			Severity: &severity,
+			Message:  "Reference to: " + ref.Target,
 		}
-		diagnostics = append(diagnostics, diagnostic)
 	}
 
-	// Create the parameters for publishDiagnostics
 	params := protocol.PublishDiagnosticsParams{
 		URI:         uri,
 		Diagnostics: diagnostics,
 	}
 
-	// Send diagnostics using the context's Notify method
 	context.Notify("textDocument/publishDiagnostics", params)
+}
+
+// URIToPath converts a LSP URI to a filesystem path
+func URIToPath(uri string) string {
+	// Remove 'file://' prefix
+	path := strings.TrimPrefix(uri, "file://")
+	// Convert any remaining URI encoding
+	path = strings.ReplaceAll(path, "%20", " ")
+	return path
+}
+
+// PathToURI converts a filesystem path to a LSP URI
+func PathToURI(path string) string {
+	// Replace spaces with %20
+	uri := strings.ReplaceAll(path, " ", "%20")
+	// Add file:// prefix
+	return "file://" + uri
 }

@@ -5,131 +5,63 @@ import (
 	"fmt"
 )
 
-// Database schema version
-const SchemaVersion = 2
+const schemaVersion = 2
 
-// NewDB initializes a new SQLite database connection, creates tables if they don’t exist,
-// and returns a DB struct with the connection.
-func NewDB(dbPath string) (*DB, error) {
-	// Open the SQLite database
-	conn, err := sql.Open("sqlite3", dbPath)
+func initSchema(db *sql.DB) error {
+	// Check schema version
+	var version int
+	err := db.QueryRow("PRAGMA user_version").Scan(&version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
+		return fmt.Errorf("failed to get schema version: %w", err)
 	}
 
-	// Initialize the DB struct
-	db := &DB{Conn: conn}
-
-	// Run database setup (creates tables if not present)
-	if err := db.setup(); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to set up database: %w", err)
+	if version == schemaVersion {
+		return nil
 	}
 
-	return db, nil
-}
-
-// NewReadonlyDB initializes a new SQLite database connection in read-only mode
-// with a specified timeout, and returns a DB struct with the connection.
-func NewReadonlyDB(dbPath string, timeoutMs int) (*DB, error) {
-	// Open the SQLite database in read-only mode with a timeout
-	connStr := fmt.Sprintf("file:%s?mode=ro&_timeout=%d", dbPath, timeoutMs)
-	conn, err := sql.Open("sqlite3", connStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open SQLite database in read-only mode: %w", err)
-	}
-
-	// Initialize the DB struct
-	db := &DB{Conn: conn}
-
-	// Verify the connection is valid (e.g., can query)
-	if err := conn.Ping(); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to connect to SQLite database in read-only mode: %w", err)
-	}
-
-	return db, nil
-}
-
-// setup checks the schema version, creates tables if they don’t exist, and runs migrations if needed
-func (db *DB) setup() error {
-	tx, err := db.Conn.Begin()
+	// Create or update schema
+	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Create tables if they don't exist
-	if err := db.createTables(tx); err != nil {
+	// Create tables
+	if err := createTables(tx); err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	// Update schema version
+	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+		return fmt.Errorf("failed to update schema version: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func createTables(tx *sql.Tx) error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS files (
+            path TEXT PRIMARY KEY,
+            last_modified INTEGER NOT NULL,
+            file_exists INTEGER NOT NULL DEFAULT 1
+        )`,
+		`CREATE TABLE IF NOT EXISTS links (
+            source_path TEXT NOT NULL,
+            target_path TEXT NOT NULL,
+            FOREIGN KEY (source_path) REFERENCES files(path) ON DELETE CASCADE,
+            FOREIGN KEY (target_path) REFERENCES files(path) ON DELETE CASCADE,
+            PRIMARY KEY (source_path, target_path)
+        )`,
+		`CREATE INDEX IF NOT EXISTS idx_links_target 
+            ON links(target_path)`,
+	}
+
+	for _, query := range queries {
+		if _, err := tx.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute query %q: %w", query, err)
+		}
 	}
 
 	return nil
-}
-
-// createTables runs the SQL commands to create the necessary tables (zettels, links, metadata)
-func (db *DB) createTables(tx *sql.Tx) error {
-	// SQL command to create zettels table
-	createZettelsTable := `
-	CREATE TABLE IF NOT EXISTS zettels (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		path TEXT UNIQUE NOT NULL,
-		checksum BLOB NOT NULL,
-		last_updated INTEGER NOT NULL
-	);
-	`
-
-	// SQL command to create links table
-	createLinksTable := `
-	CREATE TABLE IF NOT EXISTS links (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		source_id INTEGER NOT NULL,
-		target_id INTEGER NOT NULL,
-		FOREIGN KEY (source_id) REFERENCES zettels(id) ON DELETE CASCADE,
-		FOREIGN KEY (target_id) REFERENCES zettels(id) ON DELETE CASCADE
-	);
-	`
-
-	// SQL command to create metadata table
-	createMetadataTable := `
-	CREATE TABLE IF NOT EXISTS metadata (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		"key" TEXT UNIQUE NOT NULL,
-		value BLOB NOT NULL
-	);
-	`
-
-	// Execute SQL statements
-	if _, err := tx.Exec(createZettelsTable); err != nil {
-		return fmt.Errorf("failed to create zettels table: %w", err)
-	}
-	if _, err := tx.Exec(createLinksTable); err != nil {
-		return fmt.Errorf("failed to create links table: %w", err)
-	}
-	if _, err := tx.Exec(createMetadataTable); err != nil {
-		return fmt.Errorf("failed to create metadata table: %w", err)
-	}
-
-	// Check and set schema version
-	if err := db.setSchemaVersion(tx, SchemaVersion); err != nil {
-		return fmt.Errorf("failed to set schema version: %w", err)
-	}
-
-	return nil
-}
-
-// setSchemaVersion stores the current schema version in the database (for migrations)
-func (db *DB) setSchemaVersion(tx *sql.Tx, version int) error {
-	_, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, version))
-	return err
-}
-
-// Close closes the database connection
-func (db *DB) Close() error {
-	return db.Conn.Close()
 }

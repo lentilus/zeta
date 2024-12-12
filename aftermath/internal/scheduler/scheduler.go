@@ -52,34 +52,40 @@ func (s *Scheduler) RunScheduler() {
 	}()
 }
 
-// SchedulePeriodicTask periodically runs low-priority tasks
+// SchedulePeriodicTask periodically runs low-priority tasks without blocking
 func (s *Scheduler) SchedulePeriodicTask(interval time.Duration, lowTask Task) {
 	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
-	// Run the task on startup
-	s.lowPriorityLock.Lock()
-	lowTask.Execute()
-	s.lowPriorityLock.Unlock()
+	// Run the task on startup in a non-blocking manner
+	go func() {
+		s.lowPriorityLock.Lock()
+		defer s.lowPriorityLock.Unlock()
+		lowTask.Execute()
+	}()
 
-	for {
-		select {
-		case <-ticker.C:
-			// Ensure low-priority tasks don't interfere with high-priority task handling
-			s.lowPriorityLock.Lock()
+	go func() {
+		defer ticker.Stop()
+		for {
 			select {
-			case s.taskQueue <- lowTask:
-				log.Printf("Scheduled %s.", lowTask.Name)
-				s.wg.Add(1) // Add to wait group for the low-priority task
-			default:
-				log.Printf("Skipped scheduling %s. Queue is full.", lowTask.Name)
+			case <-ticker.C:
+				go func() {
+					s.lowPriorityLock.Lock()
+					defer s.lowPriorityLock.Unlock()
+
+					select {
+					case s.taskQueue <- lowTask:
+						log.Printf("Scheduled %s.", lowTask.Name)
+						s.wg.Add(1) // Add to wait group for the low-priority task
+					default:
+						log.Printf("Skipped scheduling %s. Queue is full.", lowTask.Name)
+					}
+				}()
+			case <-s.stopChan:
+				// Stop scheduling periodic tasks
+				return
 			}
-			s.lowPriorityLock.Unlock()
-		case <-s.stopChan:
-			// Stop scheduling periodic tasks
-			return
 		}
-	}
+	}()
 }
 
 // ScheduleHighPriorityTask runs a high-priority task asap

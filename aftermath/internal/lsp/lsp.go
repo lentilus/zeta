@@ -1,24 +1,21 @@
-// internal/lsp/server.go
 package lsp
 
 import (
-	"aftermath/internal/cache"
-
-	protocol "github.com/tliron/glsp/protocol_3_16"
+	"aftermath/internal/cache/memory"
+	"github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 
 type Server struct {
-	cache   *cache.Cache
-	handler *protocol.Handler
+	root            string
+	docManager      memory.DocumentManager
+	handler         *protocol.Handler
+	diagnosticCache map[string][]protocol.Diagnostic // Add this line
 }
 
-func NewServer(root string) (*server.Server, error) {
-	store := cache.NewStore(root)
-	cache := store.NewCache()
-
+func NewServer() (*server.Server, error) {
 	ls := &Server{
-		cache: cache,
+		diagnosticCache: make(map[string][]protocol.Diagnostic), // Initialize the cache
 	}
 
 	ls.handler = &protocol.Handler{

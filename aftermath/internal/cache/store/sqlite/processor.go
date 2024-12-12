@@ -12,6 +12,8 @@ import (
 )
 
 func (s *SQLiteStore) processFile(file *FileInfo) error {
+	log.Printf("(SqliteStore) Processing File: %s", file.Path)
+
 	// Use the parser to extract links from the content
 	refs, err := s.parser.ParseReferences(context.Background(), file.Content)
 	if err != nil {
@@ -38,11 +40,13 @@ func (s *SQLiteStore) processFile(file *FileInfo) error {
 	})
 
 	if err != nil {
+		log.Printf("Error in processor: %s", err)
 		return err
 	}
 
 	// First, check if the file is already in the database
 	_, err = s.db.GetFile(file.Path)
+	fmt.Println("Error from GetFile was: %s", err)
 	isNewFile := err == database.ErrNotFound
 
 	// If this is a new file, add it to the bibliography

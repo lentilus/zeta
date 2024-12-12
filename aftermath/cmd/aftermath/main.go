@@ -12,11 +12,10 @@ import (
 
 func main() {
 	// Set up logging
-	commonlog.Configure(1, nil)
+	filename := "/tmp/aftermath.log"
 
-	// Open log file
 	logFile, err := os.OpenFile(
-		"/tmp/aftermath.log",
+		filename,
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
 		0666,
 	)
@@ -24,6 +23,8 @@ func main() {
 		log.Fatalf("Failed to open log file: %v", err)
 	}
 	defer logFile.Close()
+
+	commonlog.Configure(1, &filename)
 
 	// Set up multi-writer for logging
 	multiWriter := io.MultiWriter(os.Stderr, logFile)

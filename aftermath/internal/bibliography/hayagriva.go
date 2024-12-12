@@ -2,6 +2,7 @@ package bibliography
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -19,6 +20,8 @@ func NewHyagrivaBib(filePath string) *HyagrivaBib {
 
 // Append adds new entries to the existing bibliography file
 func (h *HyagrivaBib) Append(entries []Entry) error {
+	log.Println("Appending to HyagrivaBib")
+
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(h.filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -5,12 +5,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
 )
 
 func main() {
+	// Give it some cores
+	runtime.GOMAXPROCS(8)
+
 	// Set up logging
 	filename := "/tmp/aftermath.log"
 

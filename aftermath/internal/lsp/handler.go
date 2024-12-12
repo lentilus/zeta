@@ -23,6 +23,7 @@ func (s *Server) initialize(
 	// Ensure .aftermath directory exists
 	aftermathDir := filepath.Join(root, ".aftermath")
 	if err := os.MkdirAll(aftermathDir, 0755); err != nil {
+		log.Printf("failed to create .aftermath directory: %w", err)
 		return nil, fmt.Errorf("failed to create .aftermath directory: %w", err)
 	}
 
@@ -36,6 +37,7 @@ func (s *Server) initialize(
 	// Initialize SQLite store
 	store, err := sqlite.NewSQLiteStore(storeConfig)
 	if err != nil {
+		log.Printf("failed to create store: %w")
 		return nil, fmt.Errorf("failed to create store: %w", err)
 	}
 
@@ -76,6 +78,7 @@ func (s *Server) textDocumentDidOpen(
 
 	doc, err := s.docManager.OpenDocument(path, params.TextDocument.Text)
 	if err != nil {
+		log.Printf("failed to open document: %w", err)
 		return fmt.Errorf("failed to open document: %w", err)
 	}
 
@@ -92,6 +95,7 @@ func (s *Server) textDocumentDidChange(
 
 	doc, exists := s.docManager.GetDocument(path)
 	if !exists {
+		log.Printf("document not found: %s", path)
 		return fmt.Errorf("document not found: %s", path)
 	}
 
@@ -100,6 +104,7 @@ func (s *Server) textDocumentDidChange(
 	for _, rawChange := range params.ContentChanges {
 		change, ok := rawChange.(protocol.TextDocumentContentChangeEvent)
 		if !ok {
+			log.Printf("only incremental changes are supported")
 			return fmt.Errorf("only incremental changes are supported")
 		}
 
@@ -119,6 +124,7 @@ func (s *Server) textDocumentDidChange(
 	}
 
 	if err := doc.ApplyChanges(changes); err != nil {
+		log.Printf("failed to apply changes: %w", err)
 		return fmt.Errorf("failed to apply changes: %w", err)
 	}
 
@@ -134,6 +140,7 @@ func (s *Server) textDocumentDidSave(
 	log.Printf("DidSave: %s\n", path)
 
 	if err := s.docManager.CommitDocument(path); err != nil {
+		log.Printf("failed to commit document: %w", err)
 		return fmt.Errorf("failed to commit document: %w", err)
 	}
 	return nil
@@ -164,6 +171,7 @@ func (s *Server) textDocumentDefinition(
 	context *glsp.Context,
 	params *protocol.DefinitionParams,
 ) (any, error) {
+	log.Println("Called go to defintion")
 	path := URIToPath(params.TextDocument.URI)
 	doc, exists := s.docManager.GetDocument(path)
 	if !exists {
@@ -181,6 +189,7 @@ func (s *Server) textDocumentDefinition(
 
 	// Convert target to URI
 	targetPath := filepath.Join(s.root, ref.Target)
+	log.Println("Returning from go to definition")
 	return protocol.Location{
 		URI: PathToURI(targetPath),
 		Range: protocol.Range{

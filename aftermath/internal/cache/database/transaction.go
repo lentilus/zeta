@@ -48,8 +48,11 @@ func (tx *SQLiteTx) UpsertLinks(sourcePath string, targetPaths []string) error {
 	}
 
 	// Prepare statement for inserting new links
-	stmt, err := tx.tx.Prepare(
-		"INSERT INTO links (source_path, target_path) VALUES (?, ?)",
+	stmt, err := tx.tx.Prepare(`
+        INSERT INTO links (source_path, target_path)
+        VALUES (?, ?)
+        ON CONFLICT(source_path, target_path) DO NOTHING
+        `,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare link insert statement: %w", err)

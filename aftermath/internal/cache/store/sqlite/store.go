@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 
 type SQLiteStore struct {
 	db       database.Database
+	bib      bibliography.Bibliography // New
 	parser   parser.SimpleParser
 	rootPath string
 }
@@ -18,6 +20,8 @@ func NewSQLiteStore(config Config) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
 
+	bib := bibliography.NewHyagrivaBib(config.BibPath)
+
 	simpleParser, err := parser.NewOneTimeParser()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
@@ -25,8 +29,9 @@ func NewSQLiteStore(config Config) (*SQLiteStore, error) {
 
 	return &SQLiteStore{
 		db:       db,
-		rootPath: config.RootPath,
+		bib:      bib,
 		parser:   simpleParser,
+		rootPath: config.RootPath,
 	}, nil
 }
 

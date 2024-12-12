@@ -57,9 +57,3 @@ func scanDirectory(root string) ([]*FileInfo, error) {
 
 	return files, nil
 }
-
-func parseLinks(content []byte) ([]string, error) {
-	// Implementation depends on your link format
-	// This is a placeholder - implement according to your needs
-	return nil, nil
-}

@@ -5,11 +5,12 @@ import (
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"fmt"
+	"log"
 )
 
 type SQLiteStore struct {
 	db       database.Database
-	bib      bibliography.Bibliography // New
+	bib      bibliography.Bibliography
 	parser   parser.SimpleParser
 	rootPath string
 }
@@ -59,4 +60,77 @@ func (s *SQLiteStore) Recompute() error {
 		return fmt.Errorf("failed to clear database: %w", err)
 	}
 	return s.UpdateAll()
+}
+
+// Query operations
+func (s *SQLiteStore) GetAll() ([]string, error) {
+	records, err := s.db.GetAllFiles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get files from database: %w", err)
+	}
+
+	paths := make([]string, len(records))
+	for i, record := range records {
+		paths[i] = record.Path
+	}
+
+	return paths, nil
+}
+
+func (s *SQLiteStore) GetParents(path string) ([]string, error) {
+	log.Printf("Getting parents for %s", path)
+	records, err := s.db.GetBacklinks(path)
+	if err != nil && err != database.ErrNotFound {
+		return nil, fmt.Errorf("failed to get backlinks from database: %w", err)
+	}
+
+	// If no records found but no error, return empty slice
+	if err == database.ErrNotFound {
+		return []string{}, nil
+	}
+
+	paths := make([]string, len(records))
+	for i, record := range records {
+		paths[i] = record.SourcePath
+	}
+
+	return paths, nil
+}
+
+func (s *SQLiteStore) GetChildren(path string) ([]string, error) {
+	records, err := s.db.GetLinks(path)
+	if err != nil && err != database.ErrNotFound {
+		return nil, fmt.Errorf("failed to get links from database: %w", err)
+	}
+
+	// If no records found but no error, return empty slice
+	if err == database.ErrNotFound {
+		return []string{}, nil
+	}
+
+	paths := make([]string, len(records))
+	for i, record := range records {
+		paths[i] = record.TargetPath
+	}
+
+	return paths, nil
+}
+
+// Cleanup operations
+func (s *SQLiteStore) Close() error {
+	var errors []error
+
+	if err := s.parser.Close(); err != nil {
+		errors = append(errors, fmt.Errorf("failed to close parser: %w", err))
+	}
+
+	if err := s.db.Close(); err != nil {
+		errors = append(errors, fmt.Errorf("failed to close database: %w", err))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("errors during cleanup: %v", errors)
+	}
+
+	return nil
 }

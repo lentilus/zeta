@@ -1,27 +1,25 @@
 package memory
 
 import (
-	"aftermath/internal/cache/database"
+	"aftermath/internal/cache/store"
 	"aftermath/internal/parser"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 type SQLiteDocumentManager struct {
-	db   database.Database
-	docs map[string]Document
-	root string
-	mu   sync.RWMutex
+	store store.Store
+	docs  map[string]Document
+	root  string
+	mu    sync.RWMutex
 }
 
-func NewSQLiteDocumentManager(db database.Database, root string) *SQLiteDocumentManager {
+func NewSQLiteDocumentManager(store store.Store, root string) *SQLiteDocumentManager {
 	return &SQLiteDocumentManager{
-		db:   db,
-		docs: make(map[string]Document),
-		root: root,
+		store: store,
+		docs:  make(map[string]Document),
+		root:  root,
 	}
 }
 
@@ -33,6 +31,7 @@ func (m *SQLiteDocumentManager) OpenDocument(path string, content string) (Docum
 	if doc, exists := m.docs[path]; exists {
 		return doc, fmt.Errorf("document already open: %s", path)
 	}
+
 	// Create Incremental Parser
 	parser, err := parser.NewIncrementalParser()
 	if err != nil {
@@ -57,37 +56,20 @@ func (m *SQLiteDocumentManager) GetDocument(path string) (Document, bool) {
 	return doc, exists
 }
 
-// CommitDocument updates the document and its references in the database
+// CommitDocument updates the document and its references in the store
 func (m *SQLiteDocumentManager) CommitDocument(path string) error {
 	m.mu.RLock()
-	doc, exists := m.docs[path]
+	_, exists := m.docs[path]
 	m.mu.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("document not found: %s", path)
 	}
 
-	// Get references from document
-	refs := doc.GetReferences()
-	targets := make([]string, len(refs))
-	for i, ref := range refs {
-		// Use path.Join to prepend root path to each reference target
-		targets[i] = filepath.Join(m.root, ref.Target)
-	}
-
-	// Update database
-	return m.db.WithTx(func(tx database.Transaction) error {
-		// Update file record
-		if err := tx.UpsertFile(&database.FileRecord{
-			Path:         path,
-			LastModified: time.Now().Unix(),
-		}); err != nil {
-			return fmt.Errorf("failed to update file: %w", err)
-		}
-
-		// Update links
-		return tx.UpsertLinks(path, targets)
-	})
+	// Even though we're not directly managing the database anymore,
+	// we still need to update the store with the latest state
+	// of the document, which will in turn update the database
+	return m.store.UpdateOne(path)
 }
 
 func (m *SQLiteDocumentManager) CloseDocument(path string) error {
@@ -126,22 +108,21 @@ func (m *SQLiteDocumentManager) CloseAll() error {
 	return nil
 }
 
-// Helper methods for merging database and memory state
-
+// GetAllPaths returns all paths from both store and memory
 func (m *SQLiteDocumentManager) GetAllPaths() ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Get paths from database
-	records, err := m.db.GetAllFiles()
+	// Get paths from store
+	storePaths, err := m.store.GetAll()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get files from database: %w", err)
+		return nil, fmt.Errorf("failed to get paths from store: %w", err)
 	}
 
 	// Create set of paths
 	paths := make(map[string]struct{})
-	for _, record := range records {
-		paths[record.Path] = struct{}{}
+	for _, path := range storePaths {
+		paths[path] = struct{}{}
 	}
 
 	// Add paths from memory
@@ -158,25 +139,25 @@ func (m *SQLiteDocumentManager) GetAllPaths() ([]string, error) {
 	return result, nil
 }
 
-// GetParents retrieves the parent paths of the given document path
+// GetParents returns all documents that link to the given path
 func (m *SQLiteDocumentManager) GetParents(path string) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	log.Printf("Getting Backlinks to %s from db", path)
-	// Get parents from database
-	records, err := m.db.GetBacklinks(path)
-	if err != nil && err != database.ErrNotFound {
-		return nil, fmt.Errorf("failed to get backlinks from database: %w", err)
+	// Get parents from store
+	storeParents, err := m.store.GetParents(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parents from store: %w", err)
 	}
 
 	// Create set of parents
 	parents := make(map[string]struct{})
-	for _, record := range records {
-		parents[record.SourcePath] = struct{}{}
+	for _, parent := range storeParents {
+		parents[parent] = struct{}{}
 	}
 
 	// Add parents from memory
+	// Check each open document for references to the target path
 	for docPath, doc := range m.docs {
 		for _, ref := range doc.GetReferences() {
 			if filepath.Join(m.root, ref.Target) == path {

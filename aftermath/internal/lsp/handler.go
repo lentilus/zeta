@@ -2,10 +2,11 @@
 package lsp
 
 import (
-	"aftermath/internal/cache/database"
 	"aftermath/internal/cache/memory"
+	"aftermath/internal/cache/store/sqlite"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/tliron/glsp"
@@ -19,15 +20,27 @@ func (s *Server) initialize(
 	root := URIToPath(*params.RootPath)
 	log.Printf("Root is %s", root)
 
-	// Initialize SQLite database
-	dbPath := filepath.Join(root, ".aftermath/store.db")
-	db, err := database.NewSQLiteDB(dbPath)
+	// Ensure .aftermath directory exists
+	aftermathDir := filepath.Join(root, ".aftermath")
+	if err := os.MkdirAll(aftermathDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .aftermath directory: %w", err)
+	}
+
+	// Configure SQLite store
+	storeConfig := sqlite.Config{
+		DBPath:   filepath.Join(aftermathDir, "store.db"),
+		BibPath:  filepath.Join(aftermathDir, "bibliography.yaml"),
+		RootPath: root,
+	}
+
+	// Initialize SQLite store
+	store, err := sqlite.NewSQLiteStore(storeConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create database: %w", err)
+		return nil, fmt.Errorf("failed to create store: %w", err)
 	}
 
 	// Create document manager
-	s.docManager = memory.NewSQLiteDocumentManager(db, root)
+	s.docManager = memory.NewSQLiteDocumentManager(store, root)
 	s.root = root
 
 	capabilities := s.handler.CreateServerCapabilities()

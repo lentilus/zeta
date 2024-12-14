@@ -1,10 +1,13 @@
 package sqlite
 
 import (
+	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"aftermath/internal/parser"
 	"fmt"
 	"log"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteStore struct {
@@ -14,7 +17,9 @@ type SQLiteStore struct {
 }
 
 func NewSQLiteStore(config Config) (*SQLiteStore, error) {
-	db, err := database.NewSQLiteDB(config.DBPath)
+	bib := bibliography.NewHyagrivaBib(config.BibPath)
+
+	db, err := database.NewSQLiteDB(config.DBPath, bib, config.RootPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}

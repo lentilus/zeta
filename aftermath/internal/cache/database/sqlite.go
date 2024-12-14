@@ -10,11 +10,11 @@ import (
 
 type SQLiteDB struct {
 	db   *sql.DB
-	bib  *bibliography.Bibliography
+	bib  bibliography.Bibliography
 	root string
 }
 
-func NewSQLiteDB(dbPath string, bib *bibliography.Bibliography, root string) (*SQLiteDB, error) {
+func NewSQLiteDB(dbPath string, bib bibliography.Bibliography, root string) (*SQLiteDB, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)

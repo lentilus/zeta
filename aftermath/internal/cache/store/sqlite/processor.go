@@ -12,9 +12,14 @@ import (
 func (s *SQLiteStore) processFile(file *FileInfo) error {
 	log.Printf("(SqliteStore) Processing File: %s", file.Path)
 
-	// First, check if the file is already in the database
-	_, err := s.db.GetFile(file.Path)
-	isNewFile := err == database.ErrNotFound
+	// Check if the file is already in the database
+	dbFile, _ := s.db.GetFile(file.Path)
+
+	// Skip parsing links if the file's LastModified is not newer
+	if dbFile != nil && file.LastModified <= dbFile.LastModified {
+		log.Printf("File %s not modified since last processing. Skipping.", file.Path)
+		return nil
+	}
 
 	// Use the parser to extract links from the content
 	refs, err := s.parser.ParseReferences(context.Background(), file.Content)

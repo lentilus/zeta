@@ -10,43 +10,28 @@ import (
 	"testing"
 )
 
-// Define the interface wrapper to match *bibliography.Bibliography
-type bibliographyWrapper struct {
-	impl bibliography.Bibliography
-}
-
-func newBibliographyWrapper(impl bibliography.Bibliography) *bibliography.Bibliography {
-	wrapper := bibliographyWrapper{impl: impl}
-	var bib bibliography.Bibliography = wrapper
-	return &bib
-}
-
-func (w bibliographyWrapper) Override(entries []bibliography.Entry) error {
-	return w.impl.Override(entries)
-}
-
-func (w bibliographyWrapper) Append(entries []bibliography.Entry) error {
-	return w.impl.Append(entries)
-}
-
+// Define the interface directly for the mock implementation
 type mockBibliography struct {
 	overrideCalled bool
 	appendCalled   bool
 	entries        []bibliography.Entry
 }
 
+// Implement the Override method
 func (m *mockBibliography) Override(entries []bibliography.Entry) error {
 	m.overrideCalled = true
 	m.entries = entries
 	return nil
 }
 
+// Implement the Append method
 func (m *mockBibliography) Append(entries []bibliography.Entry) error {
 	m.appendCalled = true
 	m.entries = append(m.entries, entries...)
 	return nil
 }
 
+// Update testHelper to use the simplified mockBibliography directly
 type testHelper struct {
 	db      *database.SQLiteDB
 	path    string
@@ -63,7 +48,7 @@ func setupTest(t *testing.T) *testHelper {
 
 	mockBib := &mockBibliography{}
 	dbPath := filepath.Join(tmpDir, "test.db")
-	db, err := database.NewSQLiteDB(dbPath, newBibliographyWrapper(mockBib), tmpDir)
+	db, err := database.NewSQLiteDB(dbPath, mockBib, tmpDir)
 	if err != nil {
 		os.RemoveAll(tmpDir)
 		t.Fatalf("Failed to create test database: %v", err)

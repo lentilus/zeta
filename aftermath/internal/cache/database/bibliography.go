@@ -58,7 +58,7 @@ func (db *SQLiteDB) overrideBib() error {
 		maxID = id
 	}
 
-	if err := (*db.bib).Override(entries); err != nil {
+	if err := db.bib.Override(entries); err != nil {
 		return err
 	}
 
@@ -104,7 +104,7 @@ func (db *SQLiteDB) appendBib(lastID int64) error {
 		return nil
 	}
 
-	if err := (*db.bib).Append(entries); err != nil {
+	if err := db.bib.Append(entries); err != nil {
 		return err
 	}
 

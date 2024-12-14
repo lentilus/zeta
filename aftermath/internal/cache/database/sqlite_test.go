@@ -3,48 +3,9 @@ package database_test
 import (
 	"aftermath/internal/cache/database"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
-
-type testHelper struct {
-	db   *database.SQLiteDB
-	path string
-}
-
-func setupTest(t *testing.T) *testHelper {
-	t.Helper()
-
-	// Create temporary database file
-	tmpDir, err := os.MkdirTemp("", "sqlitedb_test_*")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-
-	dbPath := filepath.Join(tmpDir, "test.db")
-	db, err := database.NewSQLiteDB(dbPath)
-	if err != nil {
-		os.RemoveAll(tmpDir)
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-
-	return &testHelper{
-		db:   db,
-		path: tmpDir,
-	}
-}
-
-func (h *testHelper) cleanup(t *testing.T) {
-	t.Helper()
-	if err := h.db.Close(); err != nil {
-		t.Errorf("Failed to close database: %v", err)
-	}
-	if err := os.RemoveAll(h.path); err != nil {
-		t.Errorf("Failed to remove test directory: %v", err)
-	}
-}
 
 func TestFileOperations(t *testing.T) {
 	h := setupTest(t)

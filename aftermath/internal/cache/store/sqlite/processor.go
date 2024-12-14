@@ -1,13 +1,11 @@
 package sqlite
 
 import (
-	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"context"
 	"fmt"
 	"log"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -44,26 +42,6 @@ func (s *SQLiteStore) processFile(file *FileInfo) error {
 		return err
 	}
 
-	// First, check if the file is already in the database
-	_, err = s.db.GetFile(file.Path)
-	fmt.Println("Error from GetFile was: %s", err)
-	isNewFile := err == database.ErrNotFound
-
-	// If this is a new file, add it to the bibliography
-	if isNewFile {
-		// Create a bibliography entry for the new file
-		target, _ := filepath.Rel(s.rootPath, file.Path)
-		entry := bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		}
-
-		if err := s.bib.Append([]bibliography.Entry{entry}); err != nil {
-			return fmt.Errorf("failed to append to bibliography: %w", err)
-		}
-	}
-
 	return nil
 }
 
@@ -97,29 +75,6 @@ func (s *SQLiteStore) processFiles(files []*FileInfo) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("encountered %d errors while processing files", len(errs))
-	}
-
-	// After all files are processed, update the bibliography with all files
-	records, err := s.db.GetAllFiles()
-	if err != nil {
-		return fmt.Errorf("failed to get all files from database: %w", err)
-	}
-
-	// Convert database records to bibliography entries
-	entries := make([]bibliography.Entry, len(records))
-	for i, record := range records {
-
-		target, _ := filepath.Rel(s.rootPath, record.Path)
-		entries[i] = bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		}
-	}
-
-	// Override the bibliography with all entries
-	if err := s.bib.Override(entries); err != nil {
-		return fmt.Errorf("failed to override bibliography: %w", err)
 	}
 
 	return nil

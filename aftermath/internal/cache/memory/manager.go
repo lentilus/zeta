@@ -3,23 +3,46 @@ package memory
 import (
 	"aftermath/internal/cache/store"
 	"aftermath/internal/parser"
+	"aftermath/internal/scheduler"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type SQLiteDocumentManager struct {
-	store store.Store
-	docs  map[string]Document
-	root  string
-	mu    sync.RWMutex
+	store    store.Store
+	docs     map[string]Document
+	root     string
+	mu       sync.RWMutex
+	schedule *scheduler.Scheduler
 }
 
 func NewSQLiteDocumentManager(store store.Store, root string) *SQLiteDocumentManager {
+
+	schedule := scheduler.NewScheduler(16)
+	schedule.RunScheduler()
+
+	update := scheduler.Task{
+		Name: "Periodic Store Update",
+		Execute: func() error {
+			err := store.UpdateAll()
+			if err != nil {
+				log.Printf("Error during periodic store update: %s", err)
+			}
+			return nil
+		},
+	}
+
+	schedule.SchedulePeriodicTask(5*time.Minute, update)
+	log.Println("Moving on from scheduled task")
+
 	return &SQLiteDocumentManager{
-		store: store,
-		docs:  make(map[string]Document),
-		root:  root,
+		store:    store,
+		docs:     make(map[string]Document),
+		root:     root,
+		schedule: schedule,
 	}
 }
 
@@ -92,6 +115,8 @@ func (m *SQLiteDocumentManager) CloseDocument(path string) error {
 func (m *SQLiteDocumentManager) CloseAll() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.schedule.StopScheduler()
 
 	var errs []error
 	for path, doc := range m.docs {

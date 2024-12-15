@@ -9,6 +9,9 @@ import (
 )
 
 func (db *SQLiteDB) syncBib() error {
+	db.mu.Lock()         // Lock the mutex
+	defer db.mu.Unlock() // Ensure the mutex is unlocked on method exit
+
 	// Get last written ID
 	var lastID int64
 	err := db.db.QueryRow(`

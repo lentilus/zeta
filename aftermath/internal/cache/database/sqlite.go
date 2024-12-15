@@ -4,6 +4,7 @@ import (
 	"aftermath/internal/bibliography"
 	"database/sql"
 	"fmt"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -12,6 +13,7 @@ type SQLiteDB struct {
 	db   *sql.DB
 	bib  bibliography.Bibliography
 	root string
+	mu   sync.Mutex
 }
 
 func NewSQLiteDB(dbPath string, bib bibliography.Bibliography, root string) (*SQLiteDB, error) {

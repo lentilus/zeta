@@ -21,7 +21,7 @@ jobs:
       - name: Build with version
         run: |
           VERSION=$(git describe --tags --always --dirty)
-          go build ./cmd/zeta -ldflags="-X main.Version=$VERSION" -o zeta
+          go build -ldflags "-X main.Version=$VERSION" -o zeta ./cmd/zeta
 
       - name: Upload binary to release
         uses: actions/upload-release-asset@v1

@@ -24,7 +24,7 @@ func NewSQLiteStore(config Config) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
 
-	simpleParser, err := parser.NewOneTimeParser()
+	simpleParser, err := parser.NewOneTimeParser(config.ParserConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
 	}

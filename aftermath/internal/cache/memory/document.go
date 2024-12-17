@@ -17,15 +17,15 @@ type ParserDocument struct {
 // NewParserDocument creates a new ParserDocument with the given content
 // If a specific parser is provided, it will be used; otherwise, a new IncrementalParser is created
 func NewParserDocument(content string, p parser.Parser) (*ParserDocument, error) {
-	var err error
+	// var err error
 
-	// Create new parser if none provided
-	if p == nil {
-		p, err = parser.NewIncrementalParser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create parser: %w", err)
-		}
-	}
+	// // Create new parser if none provided
+	// if p == nil {
+	// 	p, err = parser.NewIncrementalParser()
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to create parser: %w", err)
+	// 	}
+	// }
 
 	// Parse initial content
 	if err := p.Parse(context.Background(), []byte(content)); err != nil {

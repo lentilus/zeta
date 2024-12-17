@@ -1,9 +1,10 @@
-// internal/lsp/handler.go
 package lsp
 
 import (
 	"aftermath/internal/cache/memory"
 	"aftermath/internal/cache/store/sqlite"
+	"aftermath/internal/parser"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -20,6 +21,21 @@ func (s *Server) initialize(
 	root := URIToPath(*params.RootPath)
 	log.Printf("Root is %s", root)
 
+	// Load config
+	var config Config
+	configJson, err := json.Marshal(params.InitializationOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(configJson, &config)
+	if err != nil {
+		log.Printf("Config error. Unable to marshall. Got %s", configJson)
+		return nil, err
+	}
+
+	log.Println(config)
+
 	// Ensure .aftermath directory exists
 	aftermathDir := filepath.Join(root, ".aftermath")
 	if err := os.MkdirAll(aftermathDir, 0755); err != nil {
@@ -27,11 +43,20 @@ func (s *Server) initialize(
 		return nil, fmt.Errorf("failed to create .aftermath directory: %w", err)
 	}
 
+	// Configure Reference Parser
+	parserConfig := parser.Config{
+		ReferenceQuery:     config.ReferenceQuery,
+		TargetRegex:        config.TargetRegex,
+		PathSeparator:      config.PathSeparator,
+		CanonicalExtension: config.CanonicalExtension,
+	}
+
 	// Configure SQLite store
 	storeConfig := sqlite.Config{
-		DBPath:   filepath.Join(aftermathDir, "store.db"),
-		BibPath:  filepath.Join(aftermathDir, "bibliography.yaml"),
-		RootPath: root,
+		DBPath:       filepath.Join(aftermathDir, "store.db"),
+		BibPath:      filepath.Join(aftermathDir, "bibliography.yaml"),
+		RootPath:     root,
+		ParserConfig: parserConfig,
 	}
 
 	// Initialize SQLite store
@@ -41,8 +66,15 @@ func (s *Server) initialize(
 		return nil, fmt.Errorf("failed to create store: %w", err)
 	}
 
+	// Configure Document Manager
+	docManagerConfig := memory.Config{
+		Root:         root,
+		Store:        store,
+		ParserConfig: parserConfig,
+	}
+
 	// Create document manager
-	s.docManager = memory.NewSQLiteDocumentManager(store, root)
+	s.docManager = memory.NewSQLiteDocumentManager(docManagerConfig)
 	s.root = root
 
 	capabilities := s.handler.CreateServerCapabilities()

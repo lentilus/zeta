@@ -1,23 +1,19 @@
 package parser
 
 import (
+	"log"
+	"path"
 	"regexp"
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-var (
-	// Tree-sitter query to find references
-	refQuery = []byte(`(ref) @reference`)
+// processReferenceTarget extracts and processes the target from a reference based on the configuration
+func processReferenceTarget(config Config, content string) string {
+	// Compile the regex from the config
+	targetRegex := regexp.MustCompile(config.TargetRegex)
 
-	// Regex to extract target from reference content
-	// This pattern should match your specific reference format
-	targetRegex = regexp.MustCompile(`^\@(.*)$`)
-)
-
-// processReferenceTarget extracts and processes the target from a reference
-func processReferenceTarget(content string) string {
 	// Extract target using regex
 	matches := targetRegex.FindStringSubmatch(content)
 	if len(matches) < 2 {
@@ -27,10 +23,23 @@ func processReferenceTarget(content string) string {
 	// Get the captured group and process it
 	target := matches[1]
 
-	// Replace colons with forward slashes
-	target = strings.ReplaceAll(target, ":", "/")
+	// Replace colons with the specified path separator
+	target = strings.ReplaceAll(target, config.PathSeparator, "/")
 
-	return target + ".typ"
+	// Check if the extension is the canonical extension
+	extension := path.Ext(target)
+	if extension == "" {
+		// Append the canonical extension
+		return target + config.CanonicalExtension
+	}
+
+	if config.CanonicalExtension != "" && extension == config.CanonicalExtension {
+		// Handle ambiguity error for canonical extension, returning an empty string
+		log.Println("Error, found canonical extension in reference. Illegal.")
+		return ""
+	}
+
+	return target
 }
 
 func convertPosition(pos Position) sitter.Point {

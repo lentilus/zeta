@@ -1,8 +1,8 @@
 package memory_test
 
 import (
-	"aftermath/internal/cache/memory"
 	"testing"
+	"zeta/internal/cache/memory"
 )
 
 func TestDummyManager(t *testing.T) {

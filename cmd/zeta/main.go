@@ -1,11 +1,11 @@
 package main
 
 import (
-	"aftermath/internal/lsp"
 	"io"
 	"log"
 	"os"
 	"runtime"
+	"zeta/internal/lsp"
 
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
@@ -16,7 +16,7 @@ func main() {
 	runtime.GOMAXPROCS(8)
 
 	// Set up logging
-	filename := "/tmp/aftermath.log"
+	filename := "/tmp/zeta.log"
 
 	logFile, err := os.OpenFile(
 		filename,
@@ -34,7 +34,7 @@ func main() {
 	multiWriter := io.MultiWriter(os.Stderr, logFile)
 	log.SetOutput(multiWriter)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-	log.Println("Starting Aftermath LSP server...")
+	log.Println("Starting zeta LSP server...")
 
 	// Initialize the server
 	server, err := lsp.NewServer()

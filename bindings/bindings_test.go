@@ -1,8 +1,8 @@
 package bindings_test
 
 import (
-	"aftermath/bindings"
 	"testing"
+	"zeta/bindings"
 
 	tree_sitter "github.com/smacker/go-tree-sitter"
 )

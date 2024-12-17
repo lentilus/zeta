@@ -1,11 +1,11 @@
 package database
 
 import (
-	"aftermath/internal/bibliography"
 	"database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"zeta/internal/bibliography"
 )
 
 func (db *SQLiteDB) syncBib() error {

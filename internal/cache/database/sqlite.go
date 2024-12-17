@@ -1,10 +1,10 @@
 package database
 
 import (
-	"aftermath/internal/bibliography"
 	"database/sql"
 	"fmt"
 	"sync"
+	"zeta/internal/bibliography"
 
 	_ "github.com/mattn/go-sqlite3"
 )

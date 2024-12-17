@@ -1,10 +1,10 @@
 package database_test
 
 import (
-	"aftermath/internal/cache/database"
 	"fmt"
 	"testing"
 	"time"
+	"zeta/internal/cache/database"
 )
 
 func TestFileOperations(t *testing.T) {

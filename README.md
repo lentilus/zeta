@@ -1,4 +1,4 @@
-# aftermath
+# zeta $\zeta$
 
 A highly performant language server for __zettelkasten__-style note-taking in __typst__ that provides real-time reference tracking and navigation.
 

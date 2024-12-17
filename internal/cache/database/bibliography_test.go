@@ -2,12 +2,12 @@
 package database_test
 
 import (
-	"aftermath/internal/bibliography"
-	"aftermath/internal/cache/database"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"zeta/internal/bibliography"
+	"zeta/internal/cache/database"
 )
 
 // Define the interface directly for the mock implementation

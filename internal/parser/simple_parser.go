@@ -1,11 +1,11 @@
 package parser
 
 import (
-	"aftermath/bindings"
 	"context"
 	"sync"
 	"sync/atomic"
 	"time"
+	"zeta/bindings"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )

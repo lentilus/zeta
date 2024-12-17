@@ -1,7 +1,7 @@
 package sqlite
 
 import (
-	"aftermath/internal/parser"
+	"zeta/internal/parser"
 )
 
 type Config struct {

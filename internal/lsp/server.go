@@ -1,7 +1,7 @@
 package lsp
 
 import (
-	"aftermath/internal/cache/memory"
+	"zeta/internal/cache/memory"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
@@ -31,5 +31,5 @@ func NewServer() (*server.Server, error) {
 		Shutdown:               ls.shutdown,
 	}
 
-	return server.NewServer(ls.handler, "aftermath", false), nil
+	return server.NewServer(ls.handler, "zeta", false), nil
 }

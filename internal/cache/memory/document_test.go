@@ -1,12 +1,12 @@
 package memory_test
 
 import (
-	"aftermath/internal/cache/memory"
-	"aftermath/internal/parser"
 	"context"
 	"fmt"
 	"sync"
 	"testing"
+	"zeta/internal/cache/memory"
+	"zeta/internal/parser"
 )
 
 // MockParser implements parser.Parser for testing
@@ -262,7 +262,10 @@ func TestParserDocument(t *testing.T) {
 
 	t.Run("Multiple References", func(t *testing.T) {
 		mockParser := NewMockParser()
-		doc, err := memory.NewParserDocument("Hello @world and @universe and @everything ", mockParser)
+		doc, err := memory.NewParserDocument(
+			"Hello @world and @universe and @everything ",
+			mockParser,
+		)
 		if err != nil {
 			t.Fatalf("Failed to create document: %v", err)
 		}

@@ -1,11 +1,11 @@
 package sqlite
 
 import (
-	"aftermath/internal/bibliography"
-	"aftermath/internal/cache/database"
-	"aftermath/internal/parser"
 	"fmt"
 	"log"
+	"zeta/internal/bibliography"
+	"zeta/internal/cache/database"
+	"zeta/internal/parser"
 
 	_ "github.com/mattn/go-sqlite3"
 )

@@ -1,8 +1,8 @@
 package utils_test
 
 import (
-	"aftermath/internal/utils"
 	"testing"
+	"zeta/internal/utils"
 )
 
 func TestReference2Path(t *testing.T) {

@@ -1,14 +1,14 @@
 package memory
 
 import (
-	"aftermath/internal/cache/store"
-	"aftermath/internal/parser"
-	"aftermath/internal/scheduler"
 	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
 	"time"
+	"zeta/internal/cache/store"
+	"zeta/internal/parser"
+	"zeta/internal/scheduler"
 )
 
 type SQLiteDocumentManager struct {

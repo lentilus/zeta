@@ -1,9 +1,9 @@
 package scheduler_test
 
 import (
-	scheduler "aftermath/internal/index"
 	"testing"
 	"time"
+	scheduler "zeta/internal/index"
 )
 
 func TestSchedulerStop(t *testing.T) {

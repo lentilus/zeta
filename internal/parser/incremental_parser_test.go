@@ -1,9 +1,9 @@
 package parser_test
 
 import (
-	"aftermath/internal/parser"
 	"context"
 	"testing"
+	"zeta/internal/parser"
 )
 
 func TestIncrementalParser(t *testing.T) {

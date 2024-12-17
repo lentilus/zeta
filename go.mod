@@ -1,4 +1,4 @@
-module aftermath
+module zeta
 
 go 1.23
 

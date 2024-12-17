@@ -1,10 +1,10 @@
 package memory
 
 import (
-	"aftermath/internal/parser"
 	"context"
 	"fmt"
 	"sync"
+	"zeta/internal/parser"
 )
 
 // ParserDocument implements the Document interface using a Parser

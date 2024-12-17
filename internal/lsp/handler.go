@@ -1,14 +1,14 @@
 package lsp
 
 import (
-	"aftermath/internal/cache/memory"
-	"aftermath/internal/cache/store/sqlite"
-	"aftermath/internal/parser"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"zeta/internal/cache/memory"
+	"zeta/internal/cache/store/sqlite"
+	"zeta/internal/parser"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -36,11 +36,11 @@ func (s *Server) initialize(
 
 	log.Println(config)
 
-	// Ensure .aftermath directory exists
-	aftermathDir := filepath.Join(root, ".aftermath")
-	if err := os.MkdirAll(aftermathDir, 0755); err != nil {
-		log.Printf("failed to create .aftermath directory: %w", err)
-		return nil, fmt.Errorf("failed to create .aftermath directory: %w", err)
+	// Ensure .zeta directory exists
+	zetaDir := filepath.Join(root, ".zeta")
+	if err := os.MkdirAll(zetaDir, 0755); err != nil {
+		log.Printf("failed to create .zeta directory: %w", err)
+		return nil, fmt.Errorf("failed to create .zeta directory: %w", err)
 	}
 
 	// Configure Reference Parser
@@ -53,8 +53,8 @@ func (s *Server) initialize(
 
 	// Configure SQLite store
 	storeConfig := sqlite.Config{
-		DBPath:       filepath.Join(aftermathDir, "store.db"),
-		BibPath:      filepath.Join(aftermathDir, "bibliography.yaml"),
+		DBPath:       filepath.Join(zetaDir, "store.db"),
+		BibPath:      filepath.Join(zetaDir, "bibliography.yaml"),
 		RootPath:     root,
 		ParserConfig: parserConfig,
 	}

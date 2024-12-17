@@ -1,12 +1,12 @@
 package sqlite
 
 import (
-	"aftermath/internal/cache/database"
 	"context"
 	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
+	"zeta/internal/cache/database"
 )
 
 func (s *SQLiteStore) processFile(file *FileInfo) error {

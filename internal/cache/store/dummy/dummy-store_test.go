@@ -1,8 +1,8 @@
 package dummy_test
 
 import (
-	"aftermath/internal/cache/store/dummy"
 	"testing"
+	"zeta/internal/cache/store/dummy"
 )
 
 func TestDummyStore(t *testing.T) {

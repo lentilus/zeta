@@ -1,15 +1,19 @@
 package lsp
 
 import (
-	"aftermath/internal/cache/memory"
 	"reflect"
 	"strings"
+	"zeta/internal/cache/memory"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-func (s *Server) showReferenceDiagnostics(context *glsp.Context, uri string, references []memory.Reference) {
+func (s *Server) showReferenceDiagnostics(
+	context *glsp.Context,
+	uri string,
+	references []memory.Reference,
+) {
 	diagnostics := make([]protocol.Diagnostic, len(references))
 	severity := protocol.DiagnosticSeverityInformation
 

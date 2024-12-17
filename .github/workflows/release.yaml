@@ -1,53 +1,31 @@
-name: Release
+name: goreleaser
 
 on:
   push:
     tags:
       - 'v*'
-    branches:
-      - 'main'
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  goreleaser:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v3
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      -
+        name: Checkout
+        uses: actions/checkout@v4
         with:
-          go-version: 1.21
-
-      - name: Build with version
-        run: |
-          VERSION=$(git describe --tags --always --dirty)
-          go build -ldflags "-X main.Version=$VERSION" -o zeta ./cmd/zeta
-
-      - name: Create GitHub Release
-        id: create_release
-        run: |
-          TAG_NAME=$(git describe --tags --always --dirty)
-          RELEASE_NOTE="Release version $TAG_NAME"
-          RESPONSE=$(curl -s --request POST \
-            --url https://api.github.com/repos/${{ github.repository }}/releases \
-            --header 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
-            --header 'Content-Type: application/json' \
-            --data '{
-              "tag_name": "'"$TAG_NAME"'",
-              "name": "'"$TAG_NAME"'",
-              "body": "'"$RELEASE_NOTE"'",
-              "draft": false,
-              "prerelease": false
-            }')
-          echo "response=$RESPONSE" >> $GITHUB_ENV
-          echo "::set-output name=upload_url::$(echo $RESPONSE | jq -r .upload_url)"
-
-      - name: Upload binary to release
-        uses: actions/upload-release-asset@v1
+          fetch-depth: 0
+      -
+        name: Set up Go
+        uses: actions/setup-go@v5
+      -
+        name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./zeta
-          asset_name: zeta
-          asset_content_type: application/octet-stream
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

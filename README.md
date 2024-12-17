@@ -33,22 +33,22 @@ We must first register the zeta as a language server.
 local configs = require("lspconfig.configs")
 
 if not configs.zeta then
-	configs.zeta = {
-        -- Here we define the default configuration
-		default_config = {
-			cmd = { "zeta" },
-			filetypes = { "typst" },
-			root_dir = function(fname)
-				return lspconfig.util.root_pattern(".zeta")(fname) or nil
-			end,
-			init_options = {
-				reference_query = "(ref) @reference",
-				target_regex = "^@(.*)$",
-				path_separator = ":",
-				canonical_extension = ".typ",
-			},
-		},
-	}
+  configs.zeta = {
+    -- Here we define the default configuration
+    default_config = {
+      cmd = { "zeta" },
+      filetypes = { "typst" },
+      root_dir = function(fname)
+        return lspconfig.util.root_pattern(".zeta")(fname) or nil
+      end,
+      init_options = {
+        reference_query = "(ref) @reference",
+        target_regex = "^@(.*)$",
+        path_separator = ":",
+        canonical_extension = ".typ",
+      },
+    },
+  }
 end
 ```
 
@@ -56,8 +56,8 @@ Afterwards we can configure zeta like any other lsp.
 ```lua
 local lspconfig = require("lspconfig")
 lspconfig.zeta.setup({
-	on_attach = function(client, bufnr)
-		print("zeta attached!")
-	end,
+  on_attach = function(client, bufnr)
+    print("zeta attached!")
+  end,
 })
 ```

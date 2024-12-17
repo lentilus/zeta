@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -11,7 +13,20 @@ import (
 	_ "github.com/tliron/commonlog/simple"
 )
 
+// Version will be set during the build process using ldflags
+var Version = "-dev-"
+
 func main() {
+	// Define and parse the --version flag
+	versionFlag := flag.Bool("version", false, "Print the version of the program")
+	flag.Parse()
+
+	// Print the version if the flag is set
+	if *versionFlag {
+		fmt.Printf("zeta LSP server version %s\n", Version)
+		return
+	}
+
 	// Give it some cores
 	runtime.GOMAXPROCS(8)
 

@@ -16,6 +16,48 @@ A highly performant language server for __zettelkasten__-style note-taking in __
 2. **Find References**: Locate all notes that reference the current note
 3. **Document Diagnostics**: Real-time hints on references
 
-## Configuration
+## Installation
+Download the latest release or build from source with
+```bash
+git clone git@github.com:lentilus/zeta.git && cd zeta
+go build ./cmd/zeta -o zeta
+```
+Now place the binary somewhere in neovims runtime path and make sure it is executable.
 
-The language server can be configured through lsp-config.
+## Configuration
+You can configure zeta for use with neovim using lspconfig.
+__If you know what you are doing you can of course configure the lsp without lspconfig.__
+
+We must first register the zeta as a language server.
+```lua
+local configs = require("lspconfig.configs")
+
+if not configs.zeta then
+	configs.zeta = {
+        -- Here we define the default configuration
+		default_config = {
+			cmd = { "zeta" },
+			filetypes = { "typst" },
+			root_dir = function(fname)
+				return lspconfig.util.root_pattern(".zeta")(fname) or nil
+			end,
+			init_options = {
+				reference_query = "(ref) @reference",
+				target_regex = "^@(.*)$",
+				path_separator = ":",
+				canonical_extension = ".typ",
+			},
+		},
+	}
+end
+```
+
+Afterwards we can configure zeta like any other lsp.
+```lua
+local lspconfig = require("lspconfig")
+lspconfig.zeta.setup({
+	on_attach = function(client, bufnr)
+		print("zeta attached!")
+	end,
+})
+```

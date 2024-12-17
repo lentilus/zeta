@@ -14,7 +14,7 @@ import (
 )
 
 // Version will be set during the build process using ldflags
-var Version = "-dev-"
+var Version = "(dev) v0.0.0"
 
 func main() {
 	// Define and parse the --version flag

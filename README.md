@@ -1,6 +1,6 @@
 # aftermath
 
-A highly performant language server for Zettelkasten-style note-taking that provides real-time reference tracking, navigation, and bibliography management.
+A highly performant language server for __zettelkasten__-style note-taking in __typst__ that provides real-time reference tracking and navigation.
 
 ## Highlights
 

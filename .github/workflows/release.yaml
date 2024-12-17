@@ -3,7 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' 
+      - 'v*'
+    branches:
+      - 'main'
 
 jobs:
   build:
@@ -23,10 +25,29 @@ jobs:
           VERSION=$(git describe --tags --always --dirty)
           go build -ldflags "-X main.Version=$VERSION" -o zeta ./cmd/zeta
 
+      - name: Create GitHub Release
+        id: create_release
+        run: |
+          TAG_NAME=$(git describe --tags --always --dirty)
+          RELEASE_NOTE="Release version $TAG_NAME"
+          RESPONSE=$(curl -s --request POST \
+            --url https://api.github.com/repos/${{ github.repository }}/releases \
+            --header 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "tag_name": "'"$TAG_NAME"'",
+              "name": "'"$TAG_NAME"'",
+              "body": "'"$RELEASE_NOTE"'",
+              "draft": false,
+              "prerelease": false
+            }')
+          echo "response=$RESPONSE" >> $GITHUB_ENV
+          echo "::set-output name=upload_url::$(echo $RESPONSE | jq -r .upload_url)"
+
       - name: Upload binary to release
         uses: actions/upload-release-asset@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./zeta
           asset_name: zeta
           asset_content_type: application/octet-stream

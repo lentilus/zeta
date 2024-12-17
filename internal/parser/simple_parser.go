@@ -106,7 +106,9 @@ func (p *OneTimeParser) ParseReferences(ctx context.Context, content []byte) ([]
 
 			rawContent := capture.Node.Content(content)
 			processedTarget := processReferenceTarget(p.config, rawContent)
-			refs = append(refs, processedTarget)
+			if processedTarget != "" {
+				refs = append(refs, processedTarget)
+			}
 		}
 	}
 }

@@ -11,13 +11,15 @@ import (
 
 // processReferenceTarget extracts and processes the target from a reference based on the configuration
 func processReferenceTarget(config Config, content string) string {
+
+	log.Printf("Turing %s into", content)
 	// Compile the regex from the config
 	targetRegex := regexp.MustCompile(config.TargetRegex)
 
 	// Extract target using regex
 	matches := targetRegex.FindStringSubmatch(content)
 	if len(matches) < 2 {
-		return content // Return original content if no match
+		return "" // Return original content if no match
 	}
 
 	// Get the captured group and process it
@@ -30,6 +32,7 @@ func processReferenceTarget(config Config, content string) string {
 	extension := path.Ext(target)
 	if extension == "" {
 		// Append the canonical extension
+		log.Println(target)
 		return target + config.CanonicalExtension
 	}
 
@@ -38,6 +41,7 @@ func processReferenceTarget(config Config, content string) string {
 		log.Println("Error, found canonical extension in reference. Illegal.")
 		return ""
 	}
+	log.Println(target)
 
 	return target
 }

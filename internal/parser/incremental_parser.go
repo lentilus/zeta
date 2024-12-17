@@ -129,8 +129,13 @@ func (ip *IncrementalParser) GetReferenceAt(pos Position) (Reference, bool) {
 
 	rawContent := node.Content(ip.content)
 	nodeRange := node.Range()
+	target := processReferenceTarget(ip.config, rawContent)
+	if target == "" {
+		// not a valid reference
+		return Reference{}, false
+	}
 	ref := Reference{
-		Target: processReferenceTarget(ip.config, rawContent),
+		Target: target,
 		Range: Range{
 			Start: Position{Line: nodeRange.StartPoint.Row, Character: nodeRange.StartPoint.Column},
 			End:   Position{Line: nodeRange.EndPoint.Row, Character: nodeRange.EndPoint.Column},
@@ -204,8 +209,13 @@ func (ip *IncrementalParser) parseReferences() []Reference {
 
 		rawContent := capture.Node.Content(ip.content)
 		nodeRange := capture.Node.Range()
+		target := processReferenceTarget(ip.config, rawContent)
+		if target == "" {
+			// not a valid reference
+			continue
+		}
 		ref := Reference{
-			Target: processReferenceTarget(ip.config, rawContent),
+			Target: target,
 			Range: Range{
 				Start: Position{
 					Line:      nodeRange.StartPoint.Row,

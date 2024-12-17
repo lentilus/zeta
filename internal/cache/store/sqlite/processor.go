@@ -30,7 +30,7 @@ func (s *SQLiteStore) processFile(file *FileInfo) error {
 	// Convert references to string links if necessary
 	links := make([]string, len(refs))
 	for i, ref := range refs {
-		links[i] = filepath.Join(s.rootPath, ref+".typ")
+		links[i] = filepath.Join(s.rootPath, ref)
 	}
 
 	err = s.db.WithTx(func(tx database.Transaction) error {

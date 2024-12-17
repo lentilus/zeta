@@ -1,17 +1,23 @@
 package database
 
 import (
+	"aftermath/internal/bibliography"
 	"database/sql"
 	"fmt"
+	"sync"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteDB struct {
-	db *sql.DB
+	db   *sql.DB
+	bib  bibliography.Bibliography
+	root string
+	mu   sync.Mutex
 }
 
-func NewSQLiteDB(path string) (*SQLiteDB, error) {
-	db, err := sql.Open("sqlite3", path)
+func NewSQLiteDB(dbPath string, bib bibliography.Bibliography, root string) (*SQLiteDB, error) {
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -30,7 +36,19 @@ func NewSQLiteDB(path string) (*SQLiteDB, error) {
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
-	return &SQLiteDB{db: db}, nil
+	sqlDB := &SQLiteDB{
+		db:   db,
+		bib:  bib,
+		root: root,
+	}
+
+	// sync bib after initialization
+	if err := sqlDB.syncBib(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to sync bibliography: %w", err)
+	}
+
+	return sqlDB, nil
 }
 
 func (db *SQLiteDB) WithTx(fn func(Transaction) error) error {
@@ -47,6 +65,9 @@ func (db *SQLiteDB) WithTx(fn func(Transaction) error) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidTransaction, err)
 	}
+
+	// sync bib after successfull commit.
+	db.syncBib()
 
 	return nil
 }
@@ -113,6 +134,9 @@ func (db *SQLiteDB) UpsertFile(file *FileRecord) error {
 		return ErrConstraintViolation
 	}
 
+	// sync bib after successfully upserting file
+	db.syncBib()
+
 	return nil
 }
 
@@ -130,6 +154,9 @@ func (db *SQLiteDB) DeleteFile(path string) error {
 	if affected == 0 {
 		return ErrNotFound
 	}
+
+	// sync bib after successfully deleting file
+	db.syncBib()
 
 	return nil
 }
@@ -194,6 +221,9 @@ func (db *SQLiteDB) Clear() error {
 	if err != nil {
 		return fmt.Errorf("failed to clear database: %w", err)
 	}
+
+	// sync bib after database clear
+	db.syncBib()
 	return nil
 }
 
@@ -201,6 +231,9 @@ func (db *SQLiteDB) Close() error {
 	if _, err := db.db.Exec("DELETE FROM files WHERE file_exists = 0"); err != nil {
 		return fmt.Errorf("failed to clean up non-existent files: %w", err)
 	}
+
+	// sync bib after database clear
+	db.syncBib()
 	return db.db.Close()
 }
 

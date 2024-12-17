@@ -16,13 +16,15 @@ type OneTimeParser struct {
 	lang        *sitter.Language
 	activeCount atomic.Int32
 	maxPoolSize int32
+	config      Config
 }
 
-func NewOneTimeParser() (*OneTimeParser, error) {
+func NewOneTimeParser(config Config) (*OneTimeParser, error) {
 	lang := sitter.NewLanguage(bindings.Language())
 	p := &OneTimeParser{
 		lang:        lang,
 		maxPoolSize: 16,
+		config:      config,
 	}
 	p.parserPool = sync.Pool{
 		New: func() interface{} {
@@ -70,7 +72,7 @@ func (p *OneTimeParser) ParseReferences(ctx context.Context, content []byte) ([]
 	}
 	defer tree.Close()
 
-	query, err := sitter.NewQuery(refQuery, p.lang)
+	query, err := sitter.NewQuery([]byte(p.config.ReferenceQuery), p.lang)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +105,7 @@ func (p *OneTimeParser) ParseReferences(ctx context.Context, content []byte) ([]
 			}
 
 			rawContent := capture.Node.Content(content)
-			processedTarget := processReferenceTarget(rawContent)
+			processedTarget := processReferenceTarget(p.config, rawContent)
 			refs = append(refs, processedTarget)
 		}
 	}

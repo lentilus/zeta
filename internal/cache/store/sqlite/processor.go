@@ -1,22 +1,25 @@
 package sqlite
 
 import (
-	"aftermath/internal/bibliography"
 	"aftermath/internal/cache/database"
 	"context"
 	"fmt"
 	"log"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
 func (s *SQLiteStore) processFile(file *FileInfo) error {
 	log.Printf("(SqliteStore) Processing File: %s", file.Path)
 
-	// First, check if the file is already in the database
-	_, err := s.db.GetFile(file.Path)
-	isNewFile := err == database.ErrNotFound
+	// Check if the file is already in the database
+	dbFile, _ := s.db.GetFile(file.Path)
+
+	// Skip parsing links if the file's LastModified is not newer
+	if dbFile != nil && file.LastModified <= dbFile.LastModified {
+		log.Printf("File %s not modified since last processing. Skipping.", file.Path)
+		return nil
+	}
 
 	// Use the parser to extract links from the content
 	refs, err := s.parser.ParseReferences(context.Background(), file.Content)
@@ -46,21 +49,6 @@ func (s *SQLiteStore) processFile(file *FileInfo) error {
 	if err != nil {
 		log.Printf("Error in processor: %s", err)
 		return err
-	}
-
-	// If this is a new file, add it to the bibliography
-	if isNewFile {
-		// Create a bibliography entry for the new file
-		target, _ := filepath.Rel(s.rootPath, file.Path)
-		entry := bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		}
-
-		if err := s.bib.Append([]bibliography.Entry{entry}); err != nil {
-			return fmt.Errorf("failed to append to bibliography: %w", err)
-		}
 	}
 
 	return nil
@@ -96,29 +84,6 @@ func (s *SQLiteStore) processFiles(files []*FileInfo) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("encountered %d errors while processing files", len(errs))
-	}
-
-	// After all files are processed, update the bibliography with all files
-	records, err := s.db.GetAllFiles()
-	if err != nil {
-		return fmt.Errorf("failed to get all files from database: %w", err)
-	}
-
-	// Convert database records to bibliography entries
-	entries := make([]bibliography.Entry, len(records))
-	for i, record := range records {
-
-		target, _ := filepath.Rel(s.rootPath, record.Path)
-		entries[i] = bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		}
-	}
-
-	// Override the bibliography with all entries
-	if err := s.bib.Override(entries); err != nil {
-		return fmt.Errorf("failed to override bibliography: %w", err)
 	}
 
 	return nil

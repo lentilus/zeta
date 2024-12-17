@@ -12,14 +12,21 @@ import (
 )
 
 type SQLiteDocumentManager struct {
-	store    store.Store
-	docs     map[string]Document
-	root     string
-	mu       sync.RWMutex
-	schedule *scheduler.Scheduler
+	store        store.Store
+	docs         map[string]Document
+	root         string
+	mu           sync.RWMutex
+	schedule     *scheduler.Scheduler
+	parserConfig parser.Config
 }
 
-func NewSQLiteDocumentManager(store store.Store, root string) *SQLiteDocumentManager {
+type Config struct {
+	Root         string
+	Store        store.Store
+	ParserConfig parser.Config
+}
+
+func NewSQLiteDocumentManager(config Config) *SQLiteDocumentManager {
 
 	schedule := scheduler.NewScheduler(16)
 	schedule.RunScheduler()
@@ -27,7 +34,7 @@ func NewSQLiteDocumentManager(store store.Store, root string) *SQLiteDocumentMan
 	update := scheduler.Task{
 		Name: "Periodic Store Update",
 		Execute: func() error {
-			err := store.UpdateAll()
+			err := config.Store.UpdateAll()
 			if err != nil {
 				log.Printf("Error during periodic store update: %s", err)
 			}
@@ -39,10 +46,11 @@ func NewSQLiteDocumentManager(store store.Store, root string) *SQLiteDocumentMan
 	log.Println("Moving on from scheduled task")
 
 	return &SQLiteDocumentManager{
-		store:    store,
-		docs:     make(map[string]Document),
-		root:     root,
-		schedule: schedule,
+		store:        config.Store,
+		docs:         make(map[string]Document),
+		root:         config.Root,
+		schedule:     schedule,
+		parserConfig: config.ParserConfig,
 	}
 }
 
@@ -56,7 +64,7 @@ func (m *SQLiteDocumentManager) OpenDocument(path string, content string) (Docum
 	}
 
 	// Create Incremental Parser
-	parser, err := parser.NewIncrementalParser()
+	parser, err := parser.NewIncrementalParser(m.parserConfig)
 	if err != nil {
 		return nil, err
 	}

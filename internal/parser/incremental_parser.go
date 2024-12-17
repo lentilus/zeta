@@ -16,15 +16,16 @@ type IncrementalParser struct {
 	query      *sitter.Query
 	content    []byte
 	references []Reference
+	config     Config
 	mu         sync.RWMutex
 }
 
-func NewIncrementalParser() (*IncrementalParser, error) {
+func NewIncrementalParser(config Config) (*IncrementalParser, error) {
 	parser := sitter.NewParser()
 	lang := sitter.NewLanguage(bindings.Language())
 	parser.SetLanguage(lang)
 
-	query, err := sitter.NewQuery(refQuery, lang)
+	query, err := sitter.NewQuery([]byte(config.ReferenceQuery), lang)
 	if err != nil {
 		parser.Close()
 		return nil, err
@@ -34,6 +35,7 @@ func NewIncrementalParser() (*IncrementalParser, error) {
 		parser: parser,
 		lang:   lang,
 		query:  query,
+		config: config,
 	}, nil
 }
 
@@ -77,7 +79,11 @@ func (ip *IncrementalParser) ApplyChanges(ctx context.Context, changes []Change)
 		}
 
 		// Apply edit to content
-		newContent := make([]byte, 0, len(ip.content)-int(endOffset-startOffset)+len(change.NewText))
+		newContent := make(
+			[]byte,
+			0,
+			len(ip.content)-int(endOffset-startOffset)+len(change.NewText),
+		)
 		newContent = append(newContent, ip.content[:startOffset]...)
 		newContent = append(newContent, []byte(change.NewText)...)
 		newContent = append(newContent, ip.content[endOffset:]...)
@@ -124,7 +130,7 @@ func (ip *IncrementalParser) GetReferenceAt(pos Position) (Reference, bool) {
 	rawContent := node.Content(ip.content)
 	nodeRange := node.Range()
 	ref := Reference{
-		Target: processReferenceTarget(rawContent),
+		Target: processReferenceTarget(ip.config, rawContent),
 		Range: Range{
 			Start: Position{Line: nodeRange.StartPoint.Row, Character: nodeRange.StartPoint.Column},
 			End:   Position{Line: nodeRange.EndPoint.Row, Character: nodeRange.EndPoint.Column},
@@ -199,7 +205,7 @@ func (ip *IncrementalParser) parseReferences() []Reference {
 		rawContent := capture.Node.Content(ip.content)
 		nodeRange := capture.Node.Range()
 		ref := Reference{
-			Target: processReferenceTarget(rawContent),
+			Target: processReferenceTarget(ip.config, rawContent),
 			Range: Range{
 				Start: Position{
 					Line:      nodeRange.StartPoint.Row,

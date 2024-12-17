@@ -12,7 +12,6 @@ import (
 // processReferenceTarget extracts and processes the target from a reference based on the configuration
 func processReferenceTarget(config Config, content string) string {
 
-	log.Printf("Turing %s into", content)
 	// Compile the regex from the config
 	targetRegex := regexp.MustCompile(config.TargetRegex)
 
@@ -41,7 +40,6 @@ func processReferenceTarget(config Config, content string) string {
 		log.Println("Error, found canonical extension in reference. Illegal.")
 		return ""
 	}
-	log.Println(target)
 
 	return target
 }

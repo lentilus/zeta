@@ -2,7 +2,8 @@ package lsp
 
 import (
 	"aftermath/internal/cache/memory"
-	"github.com/tliron/glsp/protocol_3_16"
+
+	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 

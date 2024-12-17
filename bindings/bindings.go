@@ -1,8 +1,8 @@
 package bindings
 
 // #cgo CFLAGS: -std=c11 -fPIC
-// #include "../../tree-sitter-typst/src/parser.c"
-// #include "../../tree-sitter-typst/src/scanner.c"
+// #include "../tree-sitter-typst/src/parser.c"
+// #include "../tree-sitter-typst/src/scanner.c"
 import "C"
 
 import "unsafe"

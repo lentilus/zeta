@@ -8,7 +8,12 @@ import (
 
 func TestIncrementalParser(t *testing.T) {
 	// Test creation
-	p, err := parser.NewIncrementalParser()
+	config := parser.Config{
+		ReferenceQuery: `(ref) @reference`,
+		TargetRegex:    `^\@(.*)$`,
+	}
+
+	p, err := parser.NewIncrementalParser(config)
 	if err != nil {
 		t.Fatalf("Failed to create parser: %v", err)
 	}
@@ -73,7 +78,12 @@ func TestIncrementalParser(t *testing.T) {
 }
 
 func TestIncrementalParserMultipleReferences(t *testing.T) {
-	p, err := parser.NewIncrementalParser()
+	config := parser.Config{
+		ReferenceQuery: `(ref) @reference`,
+		TargetRegex:    `^\@(.*)$`,
+	}
+
+	p, err := parser.NewIncrementalParser(config)
 	if err != nil {
 		t.Fatalf("Failed to create parser: %v", err)
 	}

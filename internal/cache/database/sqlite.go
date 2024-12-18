@@ -10,14 +10,17 @@ import (
 )
 
 type SQLiteDB struct {
-	db   *sql.DB
-	bib  bibliography.Bibliography
-	root string
-	mu   sync.Mutex
+	db      *sql.DB
+	bib     bibliography.Bibliography
+	root    string
+	mu      sync.Mutex
+	canExt  string
+	pathSep string
 }
 
-func NewSQLiteDB(dbPath string, bib bibliography.Bibliography, root string) (*SQLiteDB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+func NewSQLiteDB(config Config) (*SQLiteDB, error) {
+
+	db, err := sql.Open("sqlite3", config.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -37,9 +40,11 @@ func NewSQLiteDB(dbPath string, bib bibliography.Bibliography, root string) (*SQ
 	}
 
 	sqlDB := &SQLiteDB{
-		db:   db,
-		bib:  bib,
-		root: root,
+		db:      db,
+		bib:     config.Bib,
+		root:    config.Root,
+		canExt:  config.CanonicalExtension,
+		pathSep: config.PathSeparator,
 	}
 
 	// sync bib after initialization

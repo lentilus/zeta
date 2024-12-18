@@ -8,6 +8,17 @@ import (
 	"zeta/internal/bibliography"
 )
 
+func (db *SQLiteDB) path2BibEntry(path string) bibliography.Entry {
+	relative, _ := filepath.Rel(db.root, path)
+	target := strings.ReplaceAll(relative, "/", db.pathSep)
+	entry := bibliography.Entry{
+		Target: strings.TrimSuffix(target, db.canExt),
+		Title:  relative,
+		Path:   relative,
+	}
+	return entry
+}
+
 func (db *SQLiteDB) syncBib() error {
 	db.mu.Lock()         // Lock the mutex
 	defer db.mu.Unlock() // Ensure the mutex is unlocked on method exit
@@ -52,12 +63,7 @@ func (db *SQLiteDB) overrideBib() error {
 		if err := rows.Scan(&path, &id); err != nil {
 			return fmt.Errorf("failed to scan path: %w", err)
 		}
-		target, _ := filepath.Rel(db.root, path)
-		entries = append(entries, bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		})
+		entries = append(entries, db.path2BibEntry(path))
 		maxID = id
 	}
 
@@ -94,12 +100,7 @@ func (db *SQLiteDB) appendBib(lastID int64) error {
 		if err := rows.Scan(&path, &id); err != nil {
 			return fmt.Errorf("failed to scan path: %w", err)
 		}
-		target, _ := filepath.Rel(db.root, path)
-		entries = append(entries, bibliography.Entry{
-			Target: strings.TrimSuffix(target, ".typ"),
-			Title:  target,
-			Path:   target,
-		})
+		entries = append(entries, db.path2BibEntry(path))
 		maxID = id
 	}
 

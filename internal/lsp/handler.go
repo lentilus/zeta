@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"zeta/internal/bibliography"
+	"zeta/internal/cache/database"
 	"zeta/internal/cache/memory"
 	"zeta/internal/cache/store/sqlite"
 	"zeta/internal/parser"
@@ -51,12 +53,22 @@ func (s *Server) initialize(
 		CanonicalExtension: config.CanonicalExtension,
 	}
 
+	// Configure Bibliography
+	bib := bibliography.NewHyagrivaBib(filepath.Join(zetaDir, "bibliography.yaml"))
+
+	dbConfig := database.Config{
+		Root:               root,
+		CanonicalExtension: config.CanonicalExtension,
+		PathSeparator:      config.PathSeparator,
+		DBPath:             filepath.Join(zetaDir, "store.db"),
+		Bib:                bib,
+	}
+
 	// Configure SQLite store
 	storeConfig := sqlite.Config{
-		DBPath:       filepath.Join(zetaDir, "store.db"),
-		BibPath:      filepath.Join(zetaDir, "bibliography.yaml"),
 		RootPath:     root,
 		ParserConfig: parserConfig,
+		DBConfig:     dbConfig,
 	}
 
 	// Initialize SQLite store

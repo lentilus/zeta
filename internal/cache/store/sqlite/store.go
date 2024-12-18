@@ -3,7 +3,6 @@ package sqlite
 import (
 	"fmt"
 	"log"
-	"zeta/internal/bibliography"
 	"zeta/internal/cache/database"
 	"zeta/internal/parser"
 
@@ -17,9 +16,7 @@ type SQLiteStore struct {
 }
 
 func NewSQLiteStore(config Config) (*SQLiteStore, error) {
-	bib := bibliography.NewHyagrivaBib(config.BibPath)
-
-	db, err := database.NewSQLiteDB(config.DBPath, bib, config.RootPath)
+	db, err := database.NewSQLiteDB(config.DBConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}

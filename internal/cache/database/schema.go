@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 func initSchema(db *sql.DB) error {
 	// Check schema version
@@ -89,11 +89,21 @@ func createTables(tx *sql.Tx) error {
 		// Automatically add new zettels to the bibliography when they are created
 		// The AUTOINCREMENT id in bibliography will maintain the order of addition
 		`CREATE TRIGGER IF NOT EXISTS after_file_insert
-         AFTER INSERT ON files
-         BEGIN
-             INSERT INTO bibliography (path)
-             VALUES (NEW.path);
-         END`,
+        AFTER INSERT ON files
+        WHEN NEW.file_exists = 1
+        BEGIN
+            INSERT INTO bibliography (path)
+            VALUES (NEW.path);
+        END`,
+
+		// If exists is updated
+		`CREATE TRIGGER IF NOT EXISTS after_file_update
+        AFTER UPDATE OF file_exists ON files
+        WHEN NEW.file_exists = 1 AND OLD.file_exists = 0
+        BEGIN
+            INSERT INTO bibliography (path)
+            VALUES (NEW.path);
+        END`,
 
 		// Reset the bibliography tracker when an already-written entry is deleted
 		// This ensures the bibliography file will be completely rewritten

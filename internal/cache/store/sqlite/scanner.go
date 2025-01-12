@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+const neverUpdate = (1 << 63) - 1
+
 type FileInfo struct {
 	Path         string
 	LastModified int64
@@ -14,6 +16,16 @@ type FileInfo struct {
 }
 
 func scanFile(path string) (*FileInfo, error) {
+	// If the file is not supported, we still track it
+	// but dont scan it for links.
+	// We achieve this by setting LastModified to a very large value
+	if filepath.Ext(path) != ".typ" {
+		return &FileInfo{
+			Path:         path,
+			LastModified: neverUpdate,
+		}, nil
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file: %w", err)
@@ -38,8 +50,15 @@ func scanDirectory(root string) ([]*FileInfo, error) {
 		if err != nil {
 			return err
 		}
-
-		if !info.IsDir() && filepath.Ext(path) == ".typ" {
+		if info.IsDir() {
+			name := info.Name()
+			subfiles, err := scanDirectory(name)
+			if err != nil {
+				log.Printf("Error scanning sub directory %s: %v", name, err)
+			} else {
+				files = append(files, subfiles...)
+			}
+		} else {
 			fileInfo, err := scanFile(path)
 			if err != nil {
 				log.Printf("Failed to scan file %s: %v", path, err)

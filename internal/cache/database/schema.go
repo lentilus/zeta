@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 func initSchema(db *sql.DB) error {
 	// Check schema version

@@ -54,7 +54,7 @@ func scanDirectory(root string) ([]*FileInfo, error) {
 		// skip hidden directories
 		if info.IsDir() {
 			if strings.HasPrefix(filepath.Base(path), ".") {
-				log.Printf("Ignoring hidden directory %s during scan.", root)
+				log.Printf("Ignoring hidden directory %s during scan.", path)
 				return filepath.SkipDir
 			}
 		} else {

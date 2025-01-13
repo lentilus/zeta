@@ -47,28 +47,14 @@ func scanFile(path string) (*FileInfo, error) {
 func scanDirectory(root string) ([]*FileInfo, error) {
 	var files []*FileInfo
 
-	// check for empty path
-	if root == "" {
-		return nil, nil
-	}
-
-	// check if directory is hidden
-	if strings.HasPrefix(filepath.Base(root), ".") {
-		log.Printf("Ignoring hidden directory %s during scan.", root)
-		return nil, nil
-	}
-
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			subfiles, err := scanDirectory(path)
-			if err != nil {
-				log.Printf("Error scanning sub directory %s: %v", path, err)
-			} else {
-				files = append(files, subfiles...)
-			}
+		// skip hidden directories
+		if info.IsDir() && strings.HasPrefix(filepath.Base(path), ".") {
+			log.Printf("Ignoring hidden directory %s during scan.", root)
+			return filepath.SkipDir
 		} else {
 			fileInfo, err := scanFile(path)
 			if err != nil {

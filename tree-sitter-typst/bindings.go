@@ -1,10 +1,9 @@
-package bindings
+package tree_sitter_typst
 
 // #cgo CFLAGS: -std=c11 -fPIC
-// #include "../tree-sitter-typst/src/parser.c"
-// #include "../tree-sitter-typst/src/scanner.c"
+// #include "./src/parser.c"
+// #include "./src/scanner.c"
 import "C"
-
 import "unsafe"
 
 // Get the tree-sitter Language for this grammar.

@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS notes (
     path TEXT PRIMARY KEY,
     last_modified INTEGER NOT NULL,
-    exists INTEGER NOT NULL DEFAULT 1
+    on_disk INTEGER NOT NULL DEFAULT 1
 );
 
 /* Links Table */
@@ -31,24 +31,24 @@ CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_path);
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
 
 /* === Trigger: Ensure Link Target Exists === */
-/* Before inserting a link, automatically create a target note with exists=0 if it doesn't exist */
+/* Before inserting a link, automatically create a target note with on_disk=0 if it doesn't exist */
 CREATE TRIGGER IF NOT EXISTS trg_links_insert_ensure_target
 BEFORE INSERT ON links
 FOR EACH ROW
 BEGIN
-    INSERT OR IGNORE INTO notes (path, last_modified, exists)
+    INSERT OR IGNORE INTO notes (path, last_modified, on_disk)
     VALUES (NEW.target_path, strftime('%s','now'), 0);
 END;
 
 /* === Trigger: Remove Target Note if Orphaned === */
-/* After deleting a link, if the target note was auto-created (exists=0) and has no other backlinks, delete it */
+/* After deleting a link, if the target note was auto-created (on_disk=0) and has no other backlinks, delete it */
 CREATE TRIGGER IF NOT EXISTS trg_links_delete_remove_target
 AFTER DELETE ON links
 FOR EACH ROW
 BEGIN
     DELETE FROM notes
     WHERE path = OLD.target_path
-      AND exists = 0
+      AND on_disk = 0
       AND NOT EXISTS (
           SELECT 1 FROM links WHERE target_path = OLD.target_path
       );

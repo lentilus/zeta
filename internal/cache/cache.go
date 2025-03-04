@@ -6,8 +6,8 @@ type Note string
 
 type Link struct {
     Reference string
-    source string
-    target string
+    Source string
+    Target string
     Row int
     Col int
 }

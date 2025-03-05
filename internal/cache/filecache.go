@@ -25,8 +25,11 @@ func NewFilecache(dbPath string) (*Filecache, error) {
 		return nil, err
 	}
 
-	// Enable Write-Ahead Logging (WAL)
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+	// Enable Write-Ahead Logging (WAL) and foreign keys
+	if _, err := db.Exec( `
+        PRAGMA journal_mode=WAL;
+        PRAGMA foreign_keys = ON;
+        `); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -83,9 +86,23 @@ func (fc *Filecache) UpsertNote(note Note, links []Link) error {
 	})
 }
 
-// DeleteNote removes a note from the database using a transaction.
+// DeleteNote removes a note from the database using a single transaction.
+// If the note has backlinks (i.e. other notes linking to it), it sets on_disk to 0 instead of deleting it.
 func (fc *Filecache) DeleteNote(note Note) error {
 	return fc.withTx(func(tx *sql.Tx) error {
+		var backlinkCount int
+		// Check for backlinks to the note.
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM links WHERE target_path = ?`, string(note)).Scan(&backlinkCount); err != nil {
+			return err
+		}
+
+		if backlinkCount > 0 {
+			// If backlinks exist, mark the note as missing.
+			_, err := tx.Exec(`UPDATE notes SET on_disk = 0 WHERE path = ?`, string(note))
+			return err
+		}
+
+		// Otherwise, delete the note.
 		_, err := tx.Exec(`DELETE FROM notes WHERE path = ?`, string(note))
 		return err
 	})

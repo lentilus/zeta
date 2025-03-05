@@ -220,3 +220,116 @@ func TestGetMissingNotes(t *testing.T) {
 		t.Errorf("GetMissingNotes did not return the missing note")
 	}
 }
+
+func TestIntegration_Filecache(t *testing.T) {
+	c := newTestCache(t)
+
+	// Step 1: Insert two notes and link them.
+	noteA := cache.Note("noteA")
+	noteB := cache.Note("noteB")
+	link := cache.Link{
+		Reference: "linkAB",
+		Source:    "noteA",
+		Target:    "noteB",
+		Row:       5,
+		Col:       10,
+	}
+
+	if err := c.UpsertNote(noteA, []cache.Link{link}); err != nil {
+		t.Fatalf("UpsertNote for noteA failed: %v", err)
+	}
+	if err := c.UpsertNote(noteB, nil); err != nil {
+		t.Fatalf("UpsertNote for noteB failed: %v", err)
+	}
+
+    // Ensure GetExistingNotes list all notes
+    existingNotes, err := c.GetExistingNotes()
+	if err != nil {
+		t.Fatalf("GetExistingNotes failed: %v", err)
+	}
+    if len(existingNotes) != 2 {
+		t.Errorf("expected 2 notes, got %+v", existingNotes)
+    }
+
+	// Step 2: Ensure noteB is reachable via backlinks and noteA via forward links.
+	forwardLinks, err := c.GetForwardLinks(noteA)
+	if err != nil {
+		t.Fatalf("GetForwardLinks failed: %v", err)
+	}
+	if len(forwardLinks) != 1 || forwardLinks[0] != link {
+		t.Errorf("expected forward link from noteA -> noteB, got %+v", forwardLinks)
+	}
+
+	backLinks, err := c.GetBackLinks(noteB)
+	if err != nil {
+		t.Fatalf("GetBackLinks failed: %v", err)
+	}
+	if len(backLinks) != 1 || backLinks[0] != link {
+		t.Errorf("expected backlink from noteB <- noteA, got %+v", backLinks)
+	}
+
+	// Step 3: Delete noteB and verify that:
+	// - noteB is marked missing
+	// - link from noteA -> noteB is not removed
+	if err := c.DeleteNote(noteB); err != nil {
+		t.Fatalf("DeleteNote for noteB failed: %v", err)
+	}
+
+	existingNotes, err = c.GetExistingNotes()
+	if err != nil {
+		t.Fatalf("GetExistingNotes failed: %v", err)
+	}
+    if len(existingNotes) != 1 || existingNotes[0] != noteA {
+		t.Errorf("expected noteA to remain, got %+v", existingNotes)
+    }
+
+
+	forwardLinks, err = c.GetForwardLinks(noteA)
+	if err != nil {
+		t.Fatalf("GetForwardLinks failed after deleting noteB: %v", err)
+	}
+	if len(forwardLinks) != 1 || forwardLinks[0] != link {
+		t.Errorf("expected link from noteB -> noteA to remain, got %+v", forwardLinks)
+	}
+
+	// Step 4: Verify missing notes (since noteB was a target)
+	missingNotes, err := c.GetMissingNotes()
+	if err != nil {
+		t.Fatalf("GetMissingNotes failed: %v", err)
+	}
+    existingNotes, _ = c.GetExistingNotes()
+	if len(missingNotes) != 1 || missingNotes[0] != noteB {
+		t.Errorf("existingNotes, got %+v", existingNotes)
+		t.Errorf("expected missing noteB, got %+v", missingNotes)
+	}
+
+	// Step 5: Verify timestamp updates when modifying a note.
+	time.Sleep(1 * time.Second) // Ensure a time difference
+	beforeUpdate, err := c.GetLastModified(noteA)
+	if err != nil {
+		t.Fatalf("GetLastModified failed before update: %v", err)
+	}
+
+	// Update noteA (e.g., add a new link)
+	newLink := cache.Link{
+		Reference: "linkAC",
+		Source:    "noteA",
+		Target:    "noteC",
+		Row:       2,
+		Col:       3,
+	}
+	if err := c.UpsertNote(noteA, []cache.Link{newLink}); err != nil {
+		t.Fatalf("UpsertNote failed for modifying noteA: %v", err)
+	}
+
+	afterUpdate, err := c.GetLastModified(noteA)
+	if err != nil {
+		t.Fatalf("GetLastModified failed after update: %v", err)
+	}
+	if !afterUpdate.After(beforeUpdate) {
+		t.Errorf("expected last modified timestamp to update")
+	}
+
+	// Step 6: Ensure changelog events fire correctly.
+    // TODO
+}

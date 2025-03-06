@@ -57,7 +57,7 @@ func (fc *Filecache) withTx(fn func(tx *sql.Tx) error) error {
 }
 
 // UpsertNote inserts or updates a note and its associated links using a transaction.
-func (fc *Filecache) UpsertNote(note Note, links []Link) error {
+func (fc *Filecache) UpsertNote(note NotePath, links []Link) error {
 	return fc.withTx(func(tx *sql.Tx) error {
 		now := time.Now().Unix()
 		// Insert a new note or update the last_modified timestamp if it exists.
@@ -88,7 +88,7 @@ func (fc *Filecache) UpsertNote(note Note, links []Link) error {
 
 // DeleteNote removes a note from the database using a single transaction.
 // If the note has backlinks (i.e. other notes linking to it), it sets on_disk to 0 instead of deleting it.
-func (fc *Filecache) DeleteNote(note Note) error {
+func (fc *Filecache) DeleteNote(note NotePath) error {
 	return fc.withTx(func(tx *sql.Tx) error {
 		var backlinkCount int
 		// Check for backlinks to the note.
@@ -109,7 +109,7 @@ func (fc *Filecache) DeleteNote(note Note) error {
 }
 
 // GetLastModified returns the last modification time of the note.
-func (fc *Filecache) GetLastModified(note Note) (time.Time, error) {
+func (fc *Filecache) GetLastModified(note NotePath) (time.Time, error) {
 	var ts int64
 	err := fc.db.QueryRow(`SELECT last_modified FROM notes WHERE path = ?`, string(note)).Scan(&ts)
 	if err != nil {
@@ -119,36 +119,36 @@ func (fc *Filecache) GetLastModified(note Note) (time.Time, error) {
 }
 
 // getNotes is a helper function to retrieve notes from the database.
-func (fc *Filecache) getNotes(query string, args ...interface{}) ([]Note, error) {
+func (fc *Filecache) getNotes(query string, args ...interface{}) ([]NotePath, error) {
 	rows, err := fc.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var notes []Note
+	var notes []NotePath
 	for rows.Next() {
 		var path string
 		if err := rows.Scan(&path); err != nil {
 			return nil, err
 		}
-		notes = append(notes, Note(path))
+		notes = append(notes, NotePath(path))
 	}
 	return notes, rows.Err()
 }
 
 // GetExistingNotes retrieves notes that exist (on_disk = 1).
-func (fc *Filecache) GetExistingNotes() ([]Note, error) {
+func (fc *Filecache) GetExistingNotes() ([]NotePath, error) {
 	return fc.getNotes(`SELECT path FROM notes WHERE on_disk = 1`)
 }
 
 // GetMissingNotes retrieves notes marked as missing (on_disk = 0).
-func (fc *Filecache) GetMissingNotes() ([]Note, error) {
+func (fc *Filecache) GetMissingNotes() ([]NotePath, error) {
 	return fc.getNotes(`SELECT path FROM notes WHERE on_disk = 0`)
 }
 
 // GetAllNotes returns all notes.
-func (fc *Filecache) GetAllNotes() ([]Note, error) {
+func (fc *Filecache) GetAllNotes() ([]NotePath, error) {
 	return fc.getNotes(`SELECT path FROM notes`)
 }
 
@@ -175,12 +175,12 @@ func (fc *Filecache) getLinks(query string, args ...interface{}) ([]Link, error)
 }
 
 // GetForwardLinks returns links originating from the specified note.
-func (fc *Filecache) GetForwardLinks(source Note) ([]Link, error) {
+func (fc *Filecache) GetForwardLinks(source NotePath) ([]Link, error) {
 	return fc.getLinks(`SELECT reference, row, col, source_path, target_path FROM links WHERE source_path = ?`, string(source))
 }
 
 // GetBackLinks returns links pointing to the specified note.
-func (fc *Filecache) GetBackLinks(target Note) ([]Link, error) {
+func (fc *Filecache) GetBackLinks(target NotePath) ([]Link, error) {
 	return fc.getLinks(`SELECT reference, row, col, source_path, target_path FROM links WHERE target_path = ?`, string(target))
 }
 

@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS changelog (
     timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
+/* NEW Changelog Table */
+/*
+CREATE TABLE IF NOT EXISTS changelog (
+    position INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    table_name TEXT NOT NULL,      -- e.g., "notes", "links"
+    operation TEXT NOT NULL,       -- "INSERT", "UPDATE", "DELETE"
+    identifier TEXT NOT NULL,      -- unique identifier for the object
+    data TEXT NOT NULL             -- JSON or some serialized format of the affected row
+);
+*/
+
 /* === Indexes === */
 CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_path);
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
@@ -55,22 +67,62 @@ BEGIN
 END;
 
 /* === Logging for Notes === */
-/* Log note insertions */
+/* Log note insertions with all fields */
 CREATE TRIGGER IF NOT EXISTS trg_notes_insert
 AFTER INSERT ON notes
 FOR EACH ROW
 BEGIN
     INSERT INTO changelog (table_name, operation, data)
-    VALUES ('notes', 'INSERT', json_object('path', NEW.path));
+    VALUES (
+        'notes',
+        'INSERT',
+        json_object(
+            'path', NEW.path,
+            'last_modified', NEW.last_modified,
+            'on_disk', NEW.on_disk
+        )
+    );
 END;
 
-/* Log note deletions */
+/* Log note updates with all fields (old and new values) */
+CREATE TRIGGER IF NOT EXISTS trg_notes_update
+AFTER UPDATE ON notes
+FOR EACH ROW
+BEGIN
+    INSERT INTO changelog (table_name, operation, data)
+    VALUES (
+        'notes',
+        'UPDATE',
+        json_object(
+            'old', json_object(
+                'path', OLD.path,
+                'last_modified', OLD.last_modified,
+                'on_disk', OLD.on_disk
+            ),
+            'new', json_object(
+                'path', NEW.path,
+                'last_modified', NEW.last_modified,
+                'on_disk', NEW.on_disk
+            )
+        )
+    );
+END;
+
+/* Log note deletions with all fields */
 CREATE TRIGGER IF NOT EXISTS trg_notes_delete
 AFTER DELETE ON notes
 FOR EACH ROW
 BEGIN
     INSERT INTO changelog (table_name, operation, data)
-    VALUES ('notes', 'DELETE', json_object('path', OLD.path));
+    VALUES (
+        'notes',
+        'DELETE',
+        json_object(
+            'path', OLD.path,
+            'last_modified', OLD.last_modified,
+            'on_disk', OLD.on_disk
+        )
+    );
 END;
 
 /* Prevent illegal updates on notes:
@@ -84,7 +136,7 @@ BEGIN
 END;
 
 /* === Logging for Links === */
-/* Log link insertions */
+/* Log link insertions (already logs all fields) */
 CREATE TRIGGER IF NOT EXISTS trg_links_insert
 AFTER INSERT ON links
 FOR EACH ROW
@@ -103,7 +155,7 @@ BEGIN
     );
 END;
 
-/* Log link deletions */
+/* Log link deletions (already logs all fields) */
 CREATE TRIGGER IF NOT EXISTS trg_links_delete
 AFTER DELETE ON links
 FOR EACH ROW

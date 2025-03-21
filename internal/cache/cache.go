@@ -1,80 +1,49 @@
 package cache
 
-import "time"
+type Path string
 
-// Core Types
-type NotePath string
-
+// Note represents a cached note.
 type Note struct {
-    Path      NotePath
-    TimeStamp time.Time
-    OnDisk    bool
+	missing bool
+	Path    Path
 }
 
+// Link represents a connection between notes.
 type Link struct {
-    Reference string
-    Source    string // TODO: use NotePath
-    Target    string // TODO: use NotePath
-    Row       int
-    Col       int
+	Row uint
+	Col uint
+	Ref string
+	Src Path
+	Tgt Path
 }
 
-// Identifiers
-type NoteId struct {
-    Path NotePath
-}
-
-type LinkId struct {
-    Ref string
-    Src string
-    Row int
-    Col int
-}
-
-// changeId is a sealed type
-type changeId interface { isChangeId() }
-func (NoteId) isChangeId() {}
-func (LinkId) isChangeId() {}
-
-// changeData is a sealed type
-type changeData interface { isChangeData() }
-func (Link) isChangeData() {}
-func (Note) isChangeData() {}
-
-// Operations & Objects
-type ChangeOperation string
-type ChangeObject string
-
-const (
-    Insert ChangeOperation = "Insert"
-    Update ChangeOperation = "Update"
-    Delete ChangeOperation = "Delete"
-
-    NoteObject ChangeObject = "Note"
-    LinkObject ChangeObject = "Link"
-)
-
-// Change Log Event
-type ChangeLogEvent struct {
-    Object    ChangeObject    // NoteObject or LinkObject
-    Operation ChangeOperation // Insert, Update, Delete
-    Id        changeId        // NoteID or LinkID
-    Data      changeData      // Note or Link
-}
-
-// Cache Interface
+// Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
-    // TODO: use Note instead of NotePath
-    UpsertNote(note NotePath, links []Link) error
-    DeleteNote(note NotePath) error
-    GetLastModified(note NotePath) (time.Time, error)
+	// Upsert inserts or updates a note with its associated links.
+	Upsert(note Note, links []Link) error
 
-    GetExistingNotes() ([]NotePath, error)
-    GetMissingNotes() ([]NotePath, error)
-    GetAllNotes() ([]NotePath, error)
+	// UpsertShadow inserts or updates a shadowing note with its associated links.
+	UpsertTmp(note Note, links []Link) error
 
-    GetForwardLinks(source NotePath) ([]Link, error)
-    GetBackLinks(target NotePath) ([]Link, error)
+	// Delete removes a note from the cache.
+	Delete(note Note) error
 
-    Subscribe() (<-chan ChangeLogEvent, error)
+	// DeleteShadow removes a shadowing note from the cache.
+	DeleteTmp(note Note) error
+
+	// Paths retrieves all paths of notes.
+	Paths() ([]Path, error)
+
+	// ForwardLinks returns the links originating from the note at the given path.
+	ForwardLinks(path Path) ([]Link, error)
+
+	// BackLinks returns the links pointing to the note at the given path.
+	BackLinks(path Path) ([]Link, error)
+
+	// Flush writes any in-memory changes to persistent storage.
+	Flush() error
+
+	// Subscribe allows clients to receive updates from the cache.
+	// returns initial Graph as well
+	Subscribe() error
 }

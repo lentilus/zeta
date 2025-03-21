@@ -15,6 +15,11 @@
           pkgs.go
           pkgs.gopls
 
+          # formatting
+          pkgs.gofumpt
+          pkgs.gotools
+          pkgs.golines
+
           # debugging
           pkgs.typst
           pkgs.tinymist

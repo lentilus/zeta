@@ -17,6 +17,22 @@ type Link struct {
 	Tgt Path
 }
 
+// !!! maybe make this less specific here and do the conversion at the websocket
+// CytoscapeElement describes a Cytoscape-compatible element (node or edge)
+// See https://js.cytoscape.org/#notation/elements-json.
+type CytoscapeElement struct {
+	Group string
+	Data  any
+	// TODO: add some json instructions on here
+}
+
+// Event describes an Update to a subscriber.
+type Event struct {
+	Operation string // UPSERT or DELETE
+	Element   CytoscapeElement
+	ID        int
+}
+
 // Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
 	// Upsert inserts or updates a note with its associated links.

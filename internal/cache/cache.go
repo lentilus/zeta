@@ -1,5 +1,9 @@
 package cache
 
+import (
+	"errors"
+)
+
 type Path string
 
 // Note represents a cached note.
@@ -25,6 +29,12 @@ type Event struct {
 	Data      any    // (path, missing) or (src, tgt) or ()
 }
 
+// Errors for Cache to use
+var (
+	ErrInvalidLink  = errors.New("cache: invalid link, source mismatch")
+	ErrNoteNotFound = errors.New("cache: note not found")
+)
+
 // Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
 	// Upsert inserts or updates a note with its associated links.
@@ -34,10 +44,10 @@ type Cache interface {
 	UpsertTmp(note Note, links []Link) error
 
 	// Delete removes a note from the cache.
-	Delete(note Note) error
+	Delete(path Path) error
 
 	// DeleteShadow removes a shadowing note from the cache.
-	DeleteTmp(note Note) error
+	DeleteTmp(path Path) error
 
 	// Paths retrieves all paths of notes.
 	Paths() ([]Path, error)

@@ -1,4 +1,4 @@
-package bindings_test
+package tree_sitter_typst
 
 import (
 	"testing"

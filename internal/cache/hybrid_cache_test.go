@@ -7,7 +7,7 @@ import (
 )
 
 func TestStuff(t *testing.T) {
-    pc := NewPersistentCache() // Use the interface
+    pc := NewHybridCache()
 
 	// Step 1: Insert a note "A" linking to "B" and "C"
 	noteA := Note{Path: "A"}

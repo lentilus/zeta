@@ -1,8 +1,8 @@
-package tree_sitter_typst
+package tree_sitter_typst_test
 
 import (
 	"testing"
-	"zeta/bindings"
+	bindings "zeta/tree-sitter-typst"
 
 	tree_sitter "github.com/smacker/go-tree-sitter"
 )

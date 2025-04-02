@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"zeta/internal/lsp"
+	"zeta/lsp"
 
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
@@ -28,7 +28,7 @@ func main() {
 	}
 
 	// Give it some cores
-	runtime.GOMAXPROCS(8)
+	runtime.GOMAXPROCS(4)
 
 	// Set up logging
 	filename := "/tmp/zeta.log"
@@ -48,7 +48,7 @@ func main() {
 	// Set up multi-writer for logging
 	multiWriter := io.MultiWriter(os.Stderr, logFile)
 	log.SetOutput(multiWriter)
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Llongfile)
 	log.Println("Starting zeta LSP server...")
 
 	// Initialize the server

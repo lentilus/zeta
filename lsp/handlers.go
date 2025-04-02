@@ -4,13 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"zeta/internal/bibliography"
-	"zeta/internal/cache/database"
-	"zeta/internal/cache/memory"
-	"zeta/internal/cache/store/sqlite"
-	"zeta/internal/parser"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -20,74 +13,19 @@ func (s *Server) initialize(
 	context *glsp.Context,
 	params *protocol.InitializeParams,
 ) (any, error) {
-	root := URIToPath(*params.RootPath)
-	log.Printf("Root is %s", root)
 
 	// Load config
-	var config Config
+	var config any
 	configJson, err := json.Marshal(params.InitializationOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	err = json.Unmarshal(configJson, &config)
 	if err != nil {
-		log.Printf("Config error. Unable to marshall. Got %s", configJson)
 		return nil, err
 	}
 
 	log.Println(config)
-
-	// Ensure .zeta directory exists
-	zetaDir := filepath.Join(root, ".zeta")
-	if err := os.MkdirAll(zetaDir, 0755); err != nil {
-		log.Printf("failed to create .zeta directory: %w", err)
-		return nil, fmt.Errorf("failed to create .zeta directory: %w", err)
-	}
-
-	// Configure Reference Parser
-	parserConfig := parser.Config{
-		ReferenceQuery:     config.ReferenceQuery,
-		TargetRegex:        config.TargetRegex,
-		PathSeparator:      config.PathSeparator,
-		CanonicalExtension: config.CanonicalExtension,
-	}
-
-	// Configure Bibliography
-	bib := bibliography.NewHyagrivaBib(filepath.Join(zetaDir, "bibliography.yaml"))
-
-	dbConfig := database.Config{
-		Root:               root,
-		CanonicalExtension: config.CanonicalExtension,
-		PathSeparator:      config.PathSeparator,
-		DBPath:             filepath.Join(zetaDir, "store.db"),
-		Bib:                bib,
-	}
-
-	// Configure SQLite store
-	storeConfig := sqlite.Config{
-		RootPath:     root,
-		ParserConfig: parserConfig,
-		DBConfig:     dbConfig,
-	}
-
-	// Initialize SQLite store
-	store, err := sqlite.NewSQLiteStore(storeConfig)
-	if err != nil {
-		log.Printf("failed to create store: %w")
-		return nil, fmt.Errorf("failed to create store: %w", err)
-	}
-
-	// Configure Document Manager
-	docManagerConfig := memory.Config{
-		Root:         root,
-		Store:        store,
-		ParserConfig: parserConfig,
-	}
-
-	// Create document manager
-	s.docManager = memory.NewSQLiteDocumentManager(docManagerConfig)
-	s.root = root
 
 	capabilities := s.handler.CreateServerCapabilities()
 
@@ -117,16 +55,8 @@ func (s *Server) textDocumentDidOpen(
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
 	uri := params.TextDocument.URI
-	path := URIToPath(uri)
-	log.Printf("DidOpen: %s\n", path)
+	log.Printf("DidOpen: %s\n", uri)
 
-	doc, err := s.docManager.OpenDocument(path, params.TextDocument.Text)
-	if err != nil {
-		log.Printf("failed to open document: %w", err)
-		return fmt.Errorf("failed to open document: %w", err)
-	}
-
-	s.showReferenceDiagnostics(context, uri, doc.GetReferences())
 	return nil
 }
 
@@ -135,44 +65,8 @@ func (s *Server) textDocumentDidChange(
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
 	uri := params.TextDocument.URI
-	path := URIToPath(uri)
+	fmt.Printf("TextDocumentDidChange: %s", uri)
 
-	doc, exists := s.docManager.GetDocument(path)
-	if !exists {
-		log.Printf("document not found: %s", path)
-		return fmt.Errorf("document not found: %s", path)
-	}
-
-	// Type assert the content changes
-	changes := make([]memory.Change, 0, len(params.ContentChanges))
-	for _, rawChange := range params.ContentChanges {
-		change, ok := rawChange.(protocol.TextDocumentContentChangeEvent)
-		if !ok {
-			log.Printf("only incremental changes are supported")
-			return fmt.Errorf("only incremental changes are supported")
-		}
-
-		changes = append(changes, memory.Change{
-			Range: memory.Range{
-				Start: memory.Position{
-					Line:      change.Range.Start.Line,
-					Character: change.Range.Start.Character,
-				},
-				End: memory.Position{
-					Line:      change.Range.End.Line,
-					Character: change.Range.End.Character,
-				},
-			},
-			NewText: change.Text,
-		})
-	}
-
-	if err := doc.ApplyChanges(changes); err != nil {
-		log.Printf("failed to apply changes: %w", err)
-		return fmt.Errorf("failed to apply changes: %w", err)
-	}
-
-	s.showReferenceDiagnostics(context, uri, doc.GetReferences())
 	return nil
 }
 
@@ -180,13 +74,9 @@ func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
-	path := URIToPath(params.TextDocument.URI)
-	log.Printf("DidSave: %s\n", path)
+	uri := params.TextDocument.URI
+	log.Printf("DidSave: %s\n", uri)
 
-	if err := s.docManager.CommitDocument(path); err != nil {
-		log.Printf("failed to commit document: %w", err)
-		return fmt.Errorf("failed to commit document: %w", err)
-	}
 	return nil
 }
 
@@ -194,21 +84,15 @@ func (s *Server) textDocumentDidClose(
 	context *glsp.Context,
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
-	path := URIToPath(params.TextDocument.URI)
-	log.Printf("Closed %s", path)
+	uri := params.TextDocument.URI
+	log.Printf("Closed %s", uri)
 
-	// Clear diagnostics cache for closed documents
-	delete(s.diagnosticCache, params.TextDocument.URI)
-
-	if err := s.docManager.CloseDocument(path); err != nil {
-		return fmt.Errorf("failed to close document: %w", err)
-	}
 	return nil
 }
 
 func (s *Server) shutdown(context *glsp.Context) error {
 	log.Println("Shutdown")
-	return s.docManager.CloseAll()
+	return nil
 }
 
 func (s *Server) textDocumentDefinition(
@@ -216,54 +100,17 @@ func (s *Server) textDocumentDefinition(
 	params *protocol.DefinitionParams,
 ) (any, error) {
 	log.Println("Called go to defintion")
-	path := URIToPath(params.TextDocument.URI)
-	doc, exists := s.docManager.GetDocument(path)
-	if !exists {
-		return nil, fmt.Errorf("document not found: %s", path)
-	}
-
-	ref, found := doc.GetReferenceAt(memory.Position{
-		Line:      params.Position.Line,
-		Character: params.Position.Character,
-	})
-
-	if !found {
-		return nil, nil
-	}
-
-	// Convert target to URI
-	targetPath := filepath.Join(s.root, ref.Target)
-	log.Println("Returning from go to definition")
-	return protocol.Location{
-		URI: PathToURI(targetPath),
-		Range: protocol.Range{
-			Start: protocol.Position{Line: 0, Character: 0},
-			End:   protocol.Position{Line: 0, Character: 0},
-		},
-	}, nil
+	uri := params.TextDocument.URI
+	fmt.Printf("textDocumentDefinition %s", uri)
+	return nil, nil
 }
 
 func (s *Server) textDocumentReferences(
 	context *glsp.Context,
 	params *protocol.ReferenceParams,
 ) ([]protocol.Location, error) {
-	path := URIToPath(params.TextDocument.URI)
-	log.Printf("Finding Parents of: %s", path)
-	parents, err := s.docManager.GetParents(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get parents: %w", err)
-	}
+	uri := params.TextDocument.URI
+	fmt.Printf("textDocumentReferences: %s", uri)
 
-	locations := make([]protocol.Location, len(parents))
-	for i, parent := range parents {
-		locations[i] = protocol.Location{
-			URI: PathToURI(parent),
-			Range: protocol.Range{
-				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: 0, Character: 0},
-			},
-		}
-	}
-
-	return locations, nil
+	return nil, nil
 }

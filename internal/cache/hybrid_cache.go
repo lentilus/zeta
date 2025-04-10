@@ -23,7 +23,7 @@ type HybridCache struct {
 	mu          sync.RWMutex
 }
 
-// NewPersistentCache initializes and returns a new instance of HybridCache.
+// NewHybridCache initializes and returns a new instance of HybridCache.
 func NewHybridCache() *HybridCache {
 	pc := &HybridCache{
 		tmpLayer:    newMapCacheLayer(),

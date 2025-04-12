@@ -19,19 +19,29 @@
       debug = let
         config = pkgs.writeText "init.lua" ''
           print("--DEBUG /tmp/zeta-dev --")
-          vim.lsp.start {
-            name = 'zeta',
-            cmd = { '/tmp/zeta-dev' },
-            filetypes = { 'typst' },
-            root_dir = ".",
-            capabilities = vim.lsp.protocol.make_client_capabilities(),
-            single_file_support = true,
-          }
+
+          vim.api.nvim_create_autocmd("BufReadPost", {
+            pattern = "*.typ",
+            callback = function()
+              vim.lsp.start {
+                name = "zeta",
+                cmd = { "/tmp/zeta-dev" },
+                filetypes = { "typst" },
+                root_dir = "/tmp/zeta-test-notes",
+                capabilities = vim.lsp.protocol.make_client_capabilities(),
+                single_file_support = true,
+                on_attach = function(client, bufnr)
+                  print("LSP attached to buffer", bufnr)
+                end,
+              }
+            end,
+          })
         '';
       in pkgs.writeShellScriptBin "debug" ''
         rm -rf /tmp/zeta-dev
-        go build -o /tmp/zeta-dev -gcflags=all=-N ./cmd/zeta
-        exec ${pkgs.neovim}/bin/nvim -u ${config}
+        mkdir -p /tmp/zeta-test-notes
+        go build -o /tmp/zeta-dev -gcflags=all=-N ./cmd/zeta || exit
+        exec ${pkgs.neovim}/bin/nvim -u ${config} /tmp/zeta-test-notes/test.typ
       '';
 
     in {

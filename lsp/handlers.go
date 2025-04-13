@@ -2,7 +2,9 @@ package lsp
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"zeta/internal/cache"
 	"zeta/internal/parser"
 
 	"github.com/tliron/glsp"
@@ -14,7 +16,7 @@ func (s *Server) initialize(
 	params *protocol.InitializeParams,
 ) (any, error) {
 	// Load config
-	var config any
+	var config Config
 	configJson, err := json.Marshal(params.InitializationOptions)
 	if err != nil {
 		return nil, err
@@ -24,7 +26,13 @@ func (s *Server) initialize(
 		return nil, err
 	}
 
-	log.Println(config)
+	log.Printf("Config: %v", config)
+	s.config = config
+	if params.RootURI == nil {
+		return nil, fmt.Errorf("No root uri.")
+	}
+	s.root = *params.RootURI
+	log.Printf("Root: %s", s.root)
 
 	capabilities := s.handler.CreateServerCapabilities()
 
@@ -35,9 +43,7 @@ func (s *Server) initialize(
 		Change:    &syncKind,
 		Save:      true,
 	}
-	log.Println(capabilities)
 
-	log.Println("Returning from initialize")
 	return protocol.InitializeResult{
 		Capabilities: capabilities,
 	}, nil
@@ -95,13 +101,40 @@ func (s *Server) textDocumentDidChange(
 		return err
 	}
 
-	log.Println(
-		p.Query(
-			[]byte(
-				`(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))`,
-			),
-		),
-	)
+	matches, err := p.Query([]byte(s.config.Query))
+	if err != nil {
+		return err
+	}
+	var links []cache.Link
+	// TODO: make this robust!!!
+	note := uri[len(s.root)+1:]
+
+	log.Printf("Upserting note: %s", note)
+	for _, m := range matches {
+		target, err := parser.Resolve(note, m.Content)
+		log.Printf("Target: %s", target)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		links = append(
+			links,
+			cache.Link{
+				Row: uint(m.Row),
+				Col: uint(m.Col),
+				Ref: m.Content,
+				Src: cache.Path(note),
+				Tgt: cache.Path(target),
+			},
+		)
+	}
+	err = s.cache.Upsert(cache.Path(note), links)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Print("Links:")
+	log.Println(s.cache.ForwardLinks(cache.Path(note)))
 
 	return nil
 }

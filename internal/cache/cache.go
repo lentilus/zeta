@@ -27,7 +27,7 @@ type Event struct {
 	Operation string // CREATE, DELETE, UPDATE (Update only on missing Notes)
 	Group     string // NOTE or LINK
 	ID        string // unique id for Element
-	Data      any    // (path, missing) or (src, tgt) or ()
+	Data      []any  // (path, missing) or (src, tgt) or ()
 }
 
 // Errors for Cache to use

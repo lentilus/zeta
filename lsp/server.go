@@ -8,11 +8,17 @@ import (
 	"github.com/tliron/glsp/server"
 )
 
+type Config struct {
+	Query       string `json:"query"        required:"true"`
+	SelectRegex string `json:"select_regex" required:"true"`
+}
+
 type Server struct {
 	root    string
 	handler *protocol.Handler
 	cache   cache.Cache
 	parsers map[string]*parser.Parser
+	config  Config
 }
 
 func NewServer() (*server.Server, error) {

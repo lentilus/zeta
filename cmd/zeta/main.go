@@ -43,7 +43,7 @@ func main() {
 	}
 	defer logFile.Close()
 
-	commonlog.Configure(1, &filename)
+	commonlog.Configure(2, &filename)
 
 	// Set up multi-writer for logging
 	multiWriter := io.MultiWriter(os.Stderr, logFile)

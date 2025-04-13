@@ -30,6 +30,9 @@
                 root_dir = "/tmp/zeta-test-notes",
                 capabilities = vim.lsp.protocol.make_client_capabilities(),
                 single_file_support = true,
+                init_options = {
+                  query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))' 
+                },
                 on_attach = function(client, bufnr)
                   print("LSP attached to buffer", bufnr)
                 end,

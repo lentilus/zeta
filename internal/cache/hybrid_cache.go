@@ -6,8 +6,6 @@ import (
 	"sync"
 )
 
-// Exported error types for use in exported functions.
-
 // noteID is used for identification in cytoscape only.
 type noteID uint
 
@@ -127,7 +125,7 @@ func (ps *HybridCache) moveIndex(start Path, dest Path) {
 
 // getNoteInfo retrieves note information from the temporary layer first,
 // and then falls back to the persistent layer.
-func (ps *HybridCache) getNoteInfo(path Path) (Note, bool) {
+func (ps *HybridCache) getNoteInfo(path Path) (note, bool) {
 	if info, ok := ps.tmpLayer.info(path); ok {
 		return info, true
 	}
@@ -184,7 +182,7 @@ func (ps *HybridCache) prepareTarget(src Path, link Link, cl cacheLayer) error {
 	}
 
 	// Create a missing note in the persistent layer.
-	err := cl.upsert(Note{Path: link.Tgt, missing: true}, []Link{})
+	err := cl.upsert(note{Path: link.Tgt, missing: true}, []Link{})
 	if err != nil {
 		err = fmt.Errorf("failed to upsert missing target note %s: %w", link.Tgt, err)
 		log.Println("prepareTarget error:", err)
@@ -212,7 +210,7 @@ func (ps *HybridCache) noteCreateEvent(path Path) error {
 	return nil
 }
 
-func (ps *HybridCache) noteUpdateEvent(note Note) error {
+func (ps *HybridCache) noteUpdateEvent(note note) error {
 	log.Printf("Note updated: %s", note.Path)
 	return nil
 }
@@ -223,7 +221,7 @@ func (ps *HybridCache) noteDeleteEvent(path Path) error {
 }
 
 // applyUpsert is a helper that applies upsert on a given layer, updates links diff, and triggers events.
-func (ps *HybridCache) applyUpsert(note Note, links []Link, cl cacheLayer) error {
+func (ps *HybridCache) applyUpsert(note note, links []Link, cl cacheLayer) error {
 	linksBefore, _ := ps.forwardLinks(note.Path)
 
 	// Prepare targets for all links.
@@ -264,18 +262,20 @@ func (ps *HybridCache) applyUpsert(note Note, links []Link, cl cacheLayer) error
 }
 
 // Upsert inserts or updates a note in the persistent layer.
-func (ps *HybridCache) Upsert(note Note, links []Link) error {
+func (ps *HybridCache) Upsert(path Path, links []Link) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	log.Printf("Upsert called for note %s", note.Path)
+	log.Printf("Upsert called for note %s", path)
+	note := note{Path: path, missing: false}
 	return ps.applyUpsert(note, links, ps.pstLayer)
 }
 
 // UpsertTmp inserts or updates a note in the temporary layer.
-func (ps *HybridCache) UpsertTmp(note Note, links []Link) error {
+func (ps *HybridCache) UpsertTmp(path Path, links []Link) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	log.Printf("UpsertTmp called for note %s", note.Path)
+	log.Printf("UpsertTmp called for note %s", path)
+	note := note{Path: path, missing: false}
 	return ps.applyUpsert(note, links, ps.tmpLayer)
 }
 
@@ -288,7 +288,7 @@ func (ps *HybridCache) applyDelete(path Path, cl cacheLayer) error {
 	}
 
 	// Remove outgoing links by marking note as missing.
-	if err := ps.applyUpsert(Note{Path: path, missing: true}, []Link{}, cl); err != nil {
+	if err := ps.applyUpsert(note{Path: path, missing: true}, []Link{}, cl); err != nil {
 		log.Printf("applyDelete upsert error for note %s: %v", path, err)
 		return err
 	}

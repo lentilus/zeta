@@ -6,13 +6,14 @@ import (
 
 type Path string
 
-// Note represents a cached note.
-type Note struct {
+// note represents a cached note.
+type note struct {
 	missing bool
 	Path    Path
 }
 
 // Link represents a connection between notes.
+// TODO: Changing this to an LSP like Range makes outside use easier
 type Link struct {
 	Row uint
 	Col uint
@@ -38,10 +39,10 @@ var (
 // Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
 	// Upsert inserts or updates a note with its associated links.
-	Upsert(note Note, links []Link) error
+	Upsert(path Path, links []Link) error
 
 	// UpsertShadow inserts or updates a shadowing note with its associated links.
-	UpsertTmp(note Note, links []Link) error
+	UpsertTmp(path Path, links []Link) error
 
 	// Delete removes a note from the cache.
 	Delete(path Path) error

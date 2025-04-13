@@ -6,19 +6,19 @@ import (
 )
 
 type cacheLayer interface {
-	upsert(note Note, links []Link) error
+	upsert(note note, links []Link) error
 	delete(path Path) error
 	paths() ([]Path, error)
 	forwardLinks(path Path) ([]Link, error)
 	backLinks(path Path) ([]Link, error)
-	info(path Path) (Note, bool)
+	info(path Path) (note, bool)
 }
 
 // implements cacheLayer
 type mapCacheLayer struct {
 	fLinks map[Path][]Link
 	bLinks map[Path][]Link
-	notes  map[Path]Note
+	notes  map[Path]note
 	mu     sync.RWMutex
 }
 
@@ -27,7 +27,7 @@ func newMapCacheLayer() *mapCacheLayer {
 	return &mapCacheLayer{
 		fLinks: make(map[Path][]Link),
 		bLinks: make(map[Path][]Link),
-		notes:  make(map[Path]Note),
+		notes:  make(map[Path]note),
 		mu:     sync.RWMutex{},
 	}
 }
@@ -67,7 +67,7 @@ func (cl *mapCacheLayer) overrideLinks(path Path, links []Link) error {
 	return nil
 }
 
-func (cl *mapCacheLayer) upsert(note Note, links []Link) error {
+func (cl *mapCacheLayer) upsert(note note, links []Link) error {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
@@ -122,14 +122,14 @@ func (cl *mapCacheLayer) delete(path Path) error {
 }
 
 // note retrieves a note by its path.
-func (cl *mapCacheLayer) note(path Path) Note {
+func (cl *mapCacheLayer) note(path Path) note {
 	cl.mu.RLock()
 	defer cl.mu.RUnlock()
 
 	if n, ok := cl.notes[path]; ok {
 		return n
 	}
-	return Note{}
+	return note{}
 }
 
 // paths returns a slice containing all the note paths in the cache.
@@ -167,7 +167,7 @@ func (cl *mapCacheLayer) backLinks(path Path) ([]Link, error) {
 }
 
 // info retrieves a note and a boolean indicating if it exists.
-func (cl *mapCacheLayer) info(path Path) (Note, bool) {
+func (cl *mapCacheLayer) info(path Path) (note, bool) {
 	cl.mu.RLock()
 	defer cl.mu.RUnlock()
 

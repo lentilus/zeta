@@ -38,7 +38,7 @@ func FuzzCache(f *testing.F) {
 			}
 			pos = nPos
 
-			note := c.Note{Path: c.Path(notePath)}
+			note := c.Path(notePath)
 
 			if pos >= len(data) {
 				break

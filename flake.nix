@@ -18,27 +18,42 @@
 
       debug = let
         config = pkgs.writeText "init.lua" ''
-          print("--DEBUG /tmp/zeta-dev --")
+print("--DEBUG /tmp/zeta-dev --")
 
-          vim.api.nvim_create_autocmd("BufReadPost", {
-            pattern = "*.typ",
-            callback = function()
-              vim.lsp.start {
-                name = "zeta",
-                cmd = { "/tmp/zeta-dev" },
-                filetypes = { "typst" },
-                root_dir = "/tmp/zeta-test-notes",
-                capabilities = vim.lsp.protocol.make_client_capabilities(),
-                single_file_support = true,
-                init_options = {
-                  query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))' 
-                },
-                on_attach = function(client, bufnr)
-                  print("LSP attached to buffer", bufnr)
-                end,
-              }
+vim.api.nvim_create_autocmd("BufReadPost", {
+  pattern = "*.typ",
+  callback = function()
+    vim.lsp.start {
+      name = "zeta",
+      cmd = { "/tmp/zeta-dev" },
+      filetypes = { "typst" },
+      root_dir = "/tmp/zeta-test-notes",
+      capabilities = vim.lsp.protocol.make_client_capabilities(),
+      single_file_support = true,
+      init_options = {
+        query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))'
+      },
+      on_attach = function(client, bufnr)
+        print("LSP attached to buffer", bufnr)
+        -- Create a buffer-local command :ZetaGraph that calls the workspace/executeCommand command "graph"
+        vim.api.nvim_buf_create_user_command(bufnr, "ZetaGraph", function()
+          client.request(
+            "workspace/executeCommand",
+            { command = "graph", arguments = {} },
+            function(err, result)
+              if err then
+                vim.notify("Error executing graph command: " .. err.message, vim.log.levels.ERROR)
+              else
+                vim.notify("Graph command executed.")
+              end
             end,
-          })
+            bufnr
+          )
+        end, { desc = "Execute Zeta LSP 'graph' command" })
+      end,
+    }
+  end,
+})
         '';
       in pkgs.writeShellScriptBin "debug" ''
         rm -rf /tmp/zeta-dev

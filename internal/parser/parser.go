@@ -3,13 +3,11 @@ package parser
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	typst "zeta/tree-sitter-typst"
 
 	sitter "github.com/smacker/go-tree-sitter"
-	lsp "github.com/tliron/glsp/protocol_3_16"
 )
 
 var (
@@ -17,88 +15,31 @@ var (
 	captureName = "target"
 )
 
-type Match struct {
-	Row     uint32
-	Col     uint32
-	Content string
-}
-
-// Edit represents an edit change for incremental parsing.
-type Edit sitter.EditInput
-
-func executeQuery(
-	root *sitter.Node,
-	query []byte,
-	lang *sitter.Language,
-	source []byte,
-) ([]Match, error) {
-	q, err := sitter.NewQuery(query, lang)
-	if err != nil {
-		return nil, err
-	}
-	qc := sitter.NewQueryCursor()
-	qc.Exec(q, root)
-
-	var matches []Match
-
-	for {
-		m, ok := qc.NextMatch()
-		if !ok {
-			break
-		}
-		m = qc.FilterPredicates(m, source)
-
-		for _, c := range m.Captures {
-			name := q.CaptureNameForId(c.Index)
-			if name != captureName {
-				continue
-			}
-			match := Match{
-				Row:     c.Node.StartPoint().Row,
-				Col:     c.Node.StartPoint().Column,
-				Content: c.Node.Content(source),
-			}
-
-			matches = append(matches, match)
-		}
-	}
-
-	return matches, nil
-}
-
 // Parser wraps a tree-sitter parser instance along with a (possibly) stateful syntax tree.
 type Parser struct {
 	parser *sitter.Parser
 	tree   *sitter.Tree
-	source []byte
 	mu     sync.Mutex
 }
 
 // NewParser creates a new Parser using the default language and parses
 // the provided initialText if it is non-empty. It returns the Parser or an error.
-func NewParser(initialText []byte) (*Parser, error) {
+func NewParser() (*Parser, error) {
 	p := sitter.NewParser()
 	p.SetLanguage(lang)
 	parser := &Parser{
 		parser: p,
-		source: initialText,
-	}
-	if len(initialText) > 0 {
-		tree, err := p.ParseCtx(context.Background(), nil, initialText)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse initial text: %w", err)
-		}
-		parser.tree = tree
 	}
 	return parser, nil
 }
 
-func (p *Parser) Parse() error {
-	tree, err := p.parser.ParseCtx(context.Background(), nil, p.source)
+func (p *Parser) Parse(document []byte) error {
+	// Do a full parse of the document
+	tree, err := p.parser.ParseCtx(context.Background(), p.tree, document)
 	if err != nil {
 		return err
 	}
-	// Update the Parser with the new tree and source.
+	// Update the Parser with the new tree
 	p.mu.Lock()
 	p.tree = tree
 	p.mu.Unlock()
@@ -106,39 +47,25 @@ func (p *Parser) Parse() error {
 }
 
 // Query runs the provided query against the previously parsed tree, applying predicate filtering.
-func (p *Parser) Query(query []byte) ([]Match, error) {
+func (p *Parser) Query(query []byte, document []byte) ([]*sitter.Node, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.tree == nil {
 		return nil, fmt.Errorf("no parsed tree available; first parse a document")
 	}
-	return executeQuery(p.tree.RootNode(), query, lang, p.source)
+	return executeQuery(p.tree.RootNode(), lang, query, document)
 }
 
-func (p *Parser) Update(
-	startPos lsp.Position, // LSP Position from the glsp
-	endPos lsp.Position, // LSP Position from the glsp
-	replacement string, // Replacement text to be inserted
-) error {
+func (p *Parser) Update(edit sitter.EditInput) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.tree == nil {
 		return fmt.Errorf("no tree available to update")
 	}
-	if p.source == nil {
-		return fmt.Errorf("no text available. Parser not initialized?")
-	}
-	// Apply the edit to the Tree
-	change := CreateTSEditAdapter(startPos, endPos, replacement, string(p.source))
 
-	// Apply the edit to the source (UTF8 string)
-	p.source = []byte(ApplyTextEdit(startPos, endPos, replacement, string(p.source)))
-
-	p.tree.Edit(sitter.EditInput(change))
-	log.Printf("Updated: %s", string(p.source))
-
+	p.tree.Edit(edit)
 	return nil
 }
 
@@ -169,10 +96,9 @@ func NewParserPool(n int, lang *sitter.Language) *ParserPool {
 		pool: make(chan *Parser, n),
 		lang: lang,
 	}
-	for i := 0; i < n; i++ {
-		parser, err := NewParser([]byte{})
+	for range n {
+		parser, err := NewParser()
 		if err != nil {
-			// Handle error appropriately, e.g., panic or return error
 			panic(fmt.Sprintf("failed to create parser: %v", err))
 		}
 		pp.pool <- parser
@@ -183,8 +109,7 @@ func NewParserPool(n int, lang *sitter.Language) *ParserPool {
 // Parse performs a one-time parse of the document using one Parser from the pool.
 // It creates a new syntax tree from the document, runs the provided query (with predicate filtering)
 // and returns all matches.
-// TODO: implementation could be more neat
-func (pp *ParserPool) Parse(document []byte, query []byte) ([]Match, error) {
+func (pp *ParserPool) ParseAndQuery(document []byte, query []byte) ([]*sitter.Node, error) {
 	// Acquire a parser from the pool.
 	p := <-pp.pool
 	defer func() { pp.pool <- p }()
@@ -196,10 +121,9 @@ func (pp *ParserPool) Parse(document []byte, query []byte) ([]Match, error) {
 	// Update the Parser with the new tree and source.
 	p.mu.Lock()
 	p.tree = tree
-	// p.source = document
 	p.mu.Unlock()
 
-	return executeQuery(tree.RootNode(), query, pp.lang, document)
+	return executeQuery(tree.RootNode(), pp.lang, query, document)
 }
 
 // Close releases all Parser instances in the pool.
@@ -209,4 +133,39 @@ func (pp *ParserPool) Close() error {
 		p.Close()
 	}
 	return nil
+}
+
+func executeQuery(
+	root *sitter.Node,
+	lang *sitter.Language,
+	query []byte,
+	document []byte,
+) ([]*sitter.Node, error) {
+	q, err := sitter.NewQuery(query, lang)
+	if err != nil {
+		return nil, err
+	}
+	qc := sitter.NewQueryCursor()
+	qc.Exec(q, root)
+
+	var nodes []*sitter.Node
+	var captures []sitter.QueryCapture
+
+	for {
+		m, ok := qc.NextMatch()
+		if !ok {
+			break
+		}
+		m = qc.FilterPredicates(m, document)
+		captures = append(captures, m.Captures...)
+	}
+
+	for _, c := range captures {
+		if q.CaptureNameForId(c.Index) != captureName {
+			continue
+		}
+		nodes = append(nodes, c.Node)
+	}
+
+	return nodes, nil
 }

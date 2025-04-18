@@ -2,9 +2,14 @@ package cache
 
 import (
 	"errors"
+
+	lsp "github.com/tliron/glsp/protocol_3_16"
 )
 
-type Path string
+type (
+	Path string
+	// Range lsp.Range
+)
 
 // note represents a cached note.
 type note struct {
@@ -13,21 +18,28 @@ type note struct {
 }
 
 // Link represents a connection between notes.
-// TODO: Changing this to an LSP like Range makes outside use easier
 type Link struct {
-	Row uint
-	Col uint
-	Ref string
-	Src Path
-	Tgt Path
+	Range lsp.Range
+	Src   Path
+	Tgt   Path
+}
+
+type LinkData struct {
+	SourceID int
+	TargetID int
+}
+
+type NoteData struct {
+	ID      int
+	Path    string
+	Missing bool
 }
 
 // Event describes an Update to a subscriber.
 type Event struct {
-	Operation string // CREATE, DELETE, UPDATE (Update only on missing Notes)
-	Group     string // NOTE or LINK
-	ID        string // unique id for Element
-	Data      []any  // (path, missing) or (src, tgt) or ()
+	Operation string // "createNote", "updateNote", "deleteNote", "createLink", "deleteLink"
+	Link      LinkData
+	Note      NoteData
 }
 
 // Errors for Cache to use
@@ -63,6 +75,5 @@ type Cache interface {
 	Flush() error
 
 	// Subscribe allows clients to receive updates from the cache.
-	// returns initial Graph as well
-	Subscribe() error
+	Subscribe() (<-chan Event, func(), error)
 }

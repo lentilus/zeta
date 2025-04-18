@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Graph Incremental Updates via WebSocket</title>
+    <style>
+      body { margin: 0; }
+      #graph { width: 100vw; height: 100vh; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
+  </head>
+  <body>
+    <div id="graph"></div>
+    <script>
+      // Local representation of the graph data.
+      const graphData = { nodes: [], links: [] };
+
+      // Utility to compute label opacity based on global scale.
+      function computeLabelAlpha(globalScale) {
+        const fadeStart = 1.0;
+        const fadeEnd = 0.5;
+        if (globalScale >= fadeStart) return 1;
+        if (globalScale <= fadeEnd) return 0;
+        return (globalScale - fadeEnd) / (fadeStart - fadeEnd);
+      }
+
+      // Initialize the Force-Graph instance with custom node drawing.
+      const Graph = ForceGraph()(document.getElementById("graph"))
+        .nodeId('id')
+        .d3ReheatSimulation(false)
+        .nodeCanvasObject((node, ctx, globalScale) => {
+          const r = 5;
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
+          ctx.fillStyle = '#cccccc';
+          ctx.fill();
+
+          const labelAlpha = computeLabelAlpha(globalScale);
+          if (labelAlpha > 0 && node.label) {
+            ctx.save();
+            ctx.globalAlpha = labelAlpha;
+            const fontSize = 12 / globalScale;
+            ctx.font = `${fontSize}px Sans-Serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#666666';
+            ctx.fillText(node.label, node.x, node.y + r + 2);
+            ctx.restore();
+          }
+        })
+        .linkColor(() => '#cccccc')
+        .graphData(graphData)
+        .onNodeClick(node => {
+          console.log("Clicked node:", node);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              op: "nodeClick",
+              node: { id: node.id }
+            }));
+          }
+       });
+
+      // Connect to the WebSocket endpoint.
+      const ws = new WebSocket("ws://" + location.host + "/ws");
+
+      // Handle incoming WebSocket messages.
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.op === "init") {
+          Object.assign(graphData, message.graph);
+          Graph.graphData({
+            nodes: [...graphData.nodes],
+            links: [...graphData.links]
+          });
+        } else if (message.op === "add") {
+          if (message.node) {
+            graphData.nodes.push(message.node);
+          }
+          if (message.link) {
+            graphData.links.push(message.link);
+          }
+          Graph.graphData({
+            nodes: [...graphData.nodes],
+            links: [...graphData.links]
+          });
+} else if (message.op === "update") {
+  if (message.node) {
+    // 1) update in-place
+    const existing = graphData.nodes.find(n => n.id === message.node.id);
+    if (existing) Object.assign(existing, message.node);
+
+    // 2) redraw without reheating
+    Graph.refresh();
+  }
+        } else if (message.op === "deleteNode") {
+          if (message.node) {
+            // Remove the node and any links referencing it.
+            const id = message.node.id;
+            graphData.nodes = graphData.nodes.filter(n => n.id !== id);
+            graphData.links = graphData.links.filter(l => l.source !== id && l.target !== id);
+            Graph.graphData({
+              nodes: [...graphData.nodes],
+              links: [...graphData.links]
+            });
+          }
+} else if (message.op === "deleteLink") {
+  if (message.link) {
+    const { source: srcId, target: tgtId } = message.link;
+
+    graphData.links = graphData.links.filter(l => {
+      // l.source and l.target might be objects by now, so read their .id if needed
+      const lsrc = (typeof l.source === 'object') ? l.source.id : l.source;
+      const ltgt = (typeof l.target === 'object') ? l.target.id : l.target;
+      return !(lsrc === srcId && ltgt === tgtId);
+    });
+
+    // Re‑push a fresh array so Force‑Graph knows to re‑draw
+    Graph.graphData({
+      nodes: [...graphData.nodes],
+      links: [...graphData.links]
+    });
+  }
+}
+      };
+    </script>
+  </body>
+</html>

@@ -76,8 +76,7 @@ func (cl *mapCacheLayer) upsert(note note, links []Link) error {
 		// Check that the source of the link matches the note's path.
 		if link.Src != note.Path {
 			return fmt.Errorf(
-				"invalid link %s: src %s does not match note path %s",
-				link.Ref,
+				"invalid link: src %s does not match note path %s",
 				link.Src,
 				note.Path,
 			)
@@ -86,8 +85,7 @@ func (cl *mapCacheLayer) upsert(note note, links []Link) error {
 		if link.Tgt != note.Path {
 			if _, exists := cl.notes[link.Tgt]; !exists {
 				return fmt.Errorf(
-					"invalid link %s: target note %s does not exist",
-					link.Ref,
+					"invalid link: target note %s does not exist",
 					link.Tgt,
 				)
 			}

@@ -1,0 +1,79 @@
+package lsp
+
+import (
+	"log"
+	"zeta/internal/cache"
+	"zeta/internal/graph"
+
+	"github.com/tliron/glsp"
+	protocol "github.com/tliron/glsp/protocol_3_16"
+)
+
+func (s *Server) graph(context *glsp.Context) error {
+	log.Println("called 'graph'")
+	uri := graph.ShowGraph("localhost:6213")
+	context.Notify(
+		"window/showDocument",
+		protocol.ShowDocumentParams{
+			URI:      protocol.URI(uri),
+			External: &protocol.True,
+		},
+	)
+
+	updates, _, err := s.cache.Subscribe()
+	if err != nil {
+		return err
+	}
+
+	go ProcessEvents(updates)
+	return nil
+}
+
+func ProcessEvents(events <-chan cache.Event) {
+	for ev := range events {
+		switch ev.Operation {
+		case "createNote":
+			node := graph.Node{
+				ID:    ev.Note.ID,
+				Label: ev.Note.Path,
+			}
+			if err := graph.AddNode(node); err != nil {
+				log.Printf("graph.AddNode error: %v (event %+v)", err, ev)
+			}
+		case "updateNote":
+			node := graph.Node{
+				ID:    ev.Note.ID,
+				Label: ev.Note.Path,
+			}
+			if err := graph.UpdateNode(node); err != nil {
+				log.Printf("graph.UpdateNode error: %v (event %+v)", err, ev)
+			}
+
+		case "deleteNote":
+			if err := graph.DeleteNode(ev.Note.ID); err != nil {
+				log.Printf("graph.DeleteNode error: %v (event %+v)", err, ev)
+			}
+		case "createLink":
+			link := graph.Link{
+				Source: ev.Link.SourceID,
+				Target: ev.Link.TargetID,
+			}
+
+			if err := graph.AddLink(link); err != nil {
+				log.Printf("graph.AddLink error: %v (event %+v)", err, ev)
+			}
+		case "deleteLink":
+			link := graph.Link{
+				Source: ev.Link.SourceID,
+				Target: ev.Link.TargetID,
+			}
+
+			log.Println("Deleting Link")
+			if err := graph.DeleteLink(link); err != nil {
+				log.Printf("graph.DelteLink error: %v (event %+v)", err, ev)
+			}
+		default:
+			log.Printf("unknown Operation %q in event %+v", ev.Operation, ev)
+		}
+	}
+}

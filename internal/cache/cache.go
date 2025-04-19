@@ -34,7 +34,7 @@ type NoteData struct {
 
 // Event describes an Update to a subscriber.
 type Event struct {
-	Operation string // "createNote", "updateNote", "deleteNote", "createLink", "deleteLink"
+	Operation string // "create/update/deleteNote" or "create/deleteLink"
 	Link      LinkData
 	Note      NoteData
 }

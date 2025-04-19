@@ -6,10 +6,7 @@ import (
 	lsp "github.com/tliron/glsp/protocol_3_16"
 )
 
-type (
-	Path string
-	// Range lsp.Range
-)
+type Path string
 
 // note represents a cached note.
 type note struct {
@@ -53,13 +50,13 @@ type Cache interface {
 	// Upsert inserts or updates a note with its associated links.
 	Upsert(path Path, links []Link) error
 
-	// UpsertShadow inserts or updates a shadowing note with its associated links.
+	// UpsertTmp inserts or updates a shadowing note with its associated links.
 	UpsertTmp(path Path, links []Link) error
 
 	// Delete removes a note from the cache.
 	Delete(path Path) error
 
-	// DeleteShadow removes a shadowing note from the cache.
+	// DeleteTmp removes a shadowing note from the cache.
 	DeleteTmp(path Path) error
 
 	// Paths retrieves all paths of notes.

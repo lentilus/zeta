@@ -209,7 +209,10 @@ func (cache *HybridCache) applyUpsert(n note, links []Link, layer cacheLayer) er
 	prevLinks, _ := cache.forwardLinks(n.Path)
 
 	// Do special update if possible.
-	didSpecialUpdate := cache.specialUpdate(n.Path, prevLinks, links)
+	didSpecialUpdate := false
+	if layer == cache.tmpLayer {
+		didSpecialUpdate = cache.specialUpdate(n.Path, prevLinks, links)
+	}
 
 	// Prepare targets for each link.
 	if err := cache.prepareAllTargets(n.Path, links, layer); err != nil {
@@ -224,7 +227,7 @@ func (cache *HybridCache) applyUpsert(n note, links []Link, layer cacheLayer) er
 	// Capture links state after the upsert.
 	newLinks, _ := cache.forwardLinks(n.Path)
 
-	// Compute diff and dispatch appropriate events.
+	// Compute diff and dispatch appropriate events. Skip events if specialUpdate occured.
 	if err := cache.computeDiffAndDispatchEvents(n.Path, prevLinks, newLinks, layer, !didSpecialUpdate); err != nil {
 		return err
 	}

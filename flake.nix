@@ -20,7 +20,7 @@
         config = pkgs.writeText "init.lua" ''
 print("--DEBUG /tmp/zeta-dev --")
 
-vim.api.nvim_create_autocmd("BufReadPost", {
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
   pattern = "*.typ",
   callback = function()
     vim.lsp.start {
@@ -35,7 +35,17 @@ vim.api.nvim_create_autocmd("BufReadPost", {
       },
       on_attach = function(client, bufnr)
         print("LSP attached to buffer", bufnr)
-        -- Create a buffer-local command :ZetaGraph that calls the workspace/executeCommand command "graph"
+
+        local function buf_set_keymap(...)
+          vim.api.nvim_buf_set_keymap(bufnr, ...)
+        end
+        local opts = { noremap=true, silent=true }
+
+        -- Keybindings for common LSP features
+        buf_set_keymap('n', 'gd', '<cmd>lua vim.lsp.buf.definition()<CR>', opts)
+        buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
+
+        -- Define :ZetaGraph command as you already have
         vim.api.nvim_buf_create_user_command(bufnr, "ZetaGraph", function()
           client.request(
             "workspace/executeCommand",
@@ -50,7 +60,7 @@ vim.api.nvim_create_autocmd("BufReadPost", {
             bufnr
           )
         end, { desc = "Execute Zeta LSP 'graph' command" })
-      end,
+      end
     }
   end,
 })

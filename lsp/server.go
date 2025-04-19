@@ -1,6 +1,10 @@
 package lsp
 
 import (
+	"fmt"
+	"net/url"
+	"path"
+	"strings"
 	"zeta/internal/cache"
 	"zeta/internal/parser"
 
@@ -41,4 +45,37 @@ func NewServer() (*server.Server, error) {
 	}
 
 	return server.NewServer(ls.handler, "zeta", false), nil
+}
+
+func (s *Server) URItoPath(noteuri protocol.URI) (string, error) {
+	uri, err := url.Parse(noteuri)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse uri: %w", err)
+	}
+
+	root, err := url.Parse(s.root)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse root uri: %w", err)
+	}
+
+	if uri.Scheme != root.Scheme || uri.Host != root.Host {
+		return "", fmt.Errorf("uri and root uri do not share the same scheme or host")
+	}
+
+	rel := strings.TrimPrefix(uri.Path, root.Path)
+	rel = strings.TrimLeft(rel, "/") // Remove leading slash if any
+	return rel, nil
+}
+
+func (s Server) PathToURI(relpath string) (string, error) {
+	root, err := url.Parse(s.root)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse root uri: %w", err)
+	}
+
+	// Join the root path and the relative path
+	root.Path = path.Join(root.Path, relpath)
+
+	// Rebuild the full URI
+	return root.String(), nil
 }

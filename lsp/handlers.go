@@ -44,7 +44,7 @@ func (s *Server) initialize(
 	capabilities.TextDocumentSync = &protocol.TextDocumentSyncOptions{
 		OpenClose: &protocol.True,
 		Change:    &syncKind,
-		Save:      true,
+		Save:      &protocol.True,
 	}
 
 	return protocol.InitializeResult{
@@ -85,7 +85,7 @@ func (s *Server) textDocumentDidOpen(
 		return err
 	}
 
-	source := uri[len(s.root):]
+	source, _ := s.URItoPath(uri)
 	links, err := extractLinks(nodes, doc, source)
 	if err != nil {
 		return err
@@ -140,7 +140,7 @@ func (s *Server) textDocumentDidChange(
 		return err
 	}
 
-	source := uri[len(s.root):]
+	source, _ := s.URItoPath(uri)
 	links, err := extractLinks(nodes, doc, source)
 	if err != nil {
 		return err
@@ -193,6 +193,30 @@ func (s *Server) textDocumentDefinition(
 ) (any, error) {
 	log.Println("Called go to definition")
 	log.Printf("textDocumentDefinition %s", params.TextDocument.URI)
+
+	uri := params.TextDocument.URI
+
+	path, _ := s.URItoPath(uri)
+
+	refs, err := s.cache.ForwardLinks(cache.Path(path))
+	if err != nil {
+		return nil, err
+	}
+	doc, ok := s.docs[uri]
+	if !ok {
+		panic("Document not loaded")
+	}
+
+	for _, r := range refs {
+		indexFrom, indexTo := r.Range.IndexesIn(string(doc))
+		index := params.TextDocumentPositionParams.Position.IndexIn(string(doc))
+
+		if index >= indexFrom && index <= indexTo {
+			locUri, _ := s.PathToURI(string(r.Tgt))
+			return protocol.Location{URI: locUri}, nil
+		}
+	}
+
 	return nil, nil
 }
 

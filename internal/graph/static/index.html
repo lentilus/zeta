@@ -23,8 +23,8 @@
   
         // add a centering force;
         // strength 0.05 is very weak—unlinked nodes will drift only slightly
-        .d3Force('x', d3.forceX(width  / 2).strength(0.05))
-        .d3Force('y', d3.forceY(height / 2).strength(0.05))
+        .d3Force('x', d3.forceX(0).strength(0.02))
+        .d3Force('y', d3.forceY(0).strength(0.02))
 
         .nodeId('id')
         .graphData(graphData)

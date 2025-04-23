@@ -83,46 +83,7 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	uri := params.TextDocument.URI
-	doc := []byte(params.TextDocument.Text)
-
-	s.docs[uri] = doc
-
-	p, err := parser.NewParser()
-	if err != nil {
-		panic(err)
-	}
-
-	s.parsers[uri] = p
-
-	if err := p.Parse(doc); err != nil {
-		return err
-	}
-
-	nodes, err := p.Query([]byte(s.config.Query), doc)
-	if err != nil {
-		return err
-	}
-
-	source, _ := s.URItoPath(uri)
-	links, err := extractLinks(nodes, doc, source, s.regCompiled)
-	if err != nil {
-		return err
-	}
-
-	if err := s.cache.UpsertTmp(cache.Path(source), links); err != nil {
-		return err
-	}
-
-	diagnostics := linkDiagnostics(links)
-	if len(diagnostics) > 0 {
-		context.Notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-			URI:         uri,
-			Diagnostics: diagnostics,
-		})
-	}
-
-	return nil
+	return s.process(context, params.TextDocument.URI, params.TextDocument.Text)
 }
 
 func (s *Server) textDocumentDidChange(
@@ -133,54 +94,32 @@ func (s *Server) textDocumentDidChange(
 
 	p, ok := s.parsers[uri]
 	if !ok {
-		panic("no parser for document")
+		return fmt.Errorf("no parser for document %s", uri)
 	}
 
 	doc, ok := s.docs[uri]
 	if !ok {
-		panic("no document")
+		return fmt.Errorf("no document loaded for %s", uri)
 	}
 
-	for _, c := range params.ContentChanges {
-		change, ok := c.(protocol.TextDocumentContentChangeEvent)
+	for _, raw := range params.ContentChanges {
+		change, ok := raw.(protocol.TextDocumentContentChangeEvent)
 		if !ok {
-			panic("invalid change event")
+			return fmt.Errorf("unexpected change event type %T", raw)
 		}
 
-		p.Update(sitteradapter.CreateTSEditAdapter(change, string(doc)))
+		// Update the Tree-sitter parser with the text edit
+		tsEdit := sitteradapter.CreateTSEditAdapter(change, string(doc))
+		p.Update(tsEdit)
+
+		// Apply the same edit to our in-memory document bytes
 		doc = []byte(sitteradapter.ApplyTextEdit(change, string(doc)))
 	}
 
+	// Store the updated document back in the server state.
 	s.docs[uri] = doc
-	p.Parse(doc)
 
-	nodes, err := p.Query([]byte(s.config.Query), doc)
-	if err != nil {
-		return err
-	}
-
-	source, _ := s.URItoPath(uri)
-	links, err := extractLinks(nodes, doc, source, s.regCompiled)
-	if err != nil {
-		return err
-	}
-
-	if err := s.cache.UpsertTmp(cache.Path(source), links); err != nil {
-		return err
-	}
-
-	forwardLinks, _ := s.cache.ForwardLinks(cache.Path(source))
-	log.Println(forwardLinks)
-
-	diagnostics := linkDiagnostics(forwardLinks)
-	if len(diagnostics) > 0 {
-		context.Notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-			URI:         uri,
-			Diagnostics: diagnostics,
-		})
-	}
-
-	return nil
+	return s.process(context, uri, string(doc))
 }
 
 func (s *Server) textDocumentDidSave(
@@ -383,4 +322,62 @@ func isSubsequence(pattern, text string) bool {
 		}
 	}
 	return false
+}
+
+// process parses, queries, caches, and publishes diagnostics.
+func (s *Server) process(
+	ctx *glsp.Context,
+	uri protocol.DocumentUri,
+	document string,
+) error {
+	// ensure parser and doc state
+	p, ok := s.parsers[uri]
+	if !ok || p == nil {
+		var err error
+		p, err = parser.NewParser()
+		if err != nil {
+			return err
+		}
+		s.parsers[uri] = p
+	}
+	doc := []byte(document)
+	s.docs[uri] = doc
+
+	// parse
+	if err := p.Parse(doc); err != nil {
+		return err
+	}
+
+	// query
+	nodes, err := p.Query([]byte(s.config.Query), doc)
+	if err != nil {
+		return err
+	}
+
+	// build links
+	source, err := s.URItoPath(uri)
+	if err != nil {
+		return err
+	}
+	links, err := extractLinks(nodes, doc, source, s.regCompiled)
+	if err != nil {
+		return err
+	}
+
+	// cache
+	path := cache.Path(source)
+	if err := s.cache.Upsert(path, links); err != nil {
+		return err
+	}
+
+	// 6) diagnostics
+	diagnostics := linkDiagnostics(links)
+	if len(diagnostics) > 0 {
+		ctx.Notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+			URI:         uri,
+			Diagnostics: diagnostics,
+		})
+	}
+
+	return nil
 }

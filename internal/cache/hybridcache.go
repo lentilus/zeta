@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 )
 
 // noteID is used for identification.
@@ -356,6 +357,14 @@ func (ps *HybridCache) BackLinks(path Path) ([]Link, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	return ps.backLinks(path)
+}
+
+func (cache *HybridCache) Timestamp(path Path) (time.Time, error) {
+	note, ok := cache.pstLayer.info(path)
+	if !ok {
+		return time.Now(), ErrNoteNotFound
+	}
+	return note.Timestamp, nil
 }
 
 // Flush returns an error as the operation is not implemented.

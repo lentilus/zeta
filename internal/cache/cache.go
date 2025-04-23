@@ -2,6 +2,7 @@ package cache
 
 import (
 	"errors"
+	"time"
 
 	lsp "github.com/tliron/glsp/protocol_3_16"
 )
@@ -10,8 +11,9 @@ type Path string
 
 // note represents a cached note.
 type note struct {
-	missing bool
-	Path    Path
+	missing   bool
+	Path      Path
+	Timestamp time.Time
 }
 
 // Link represents a connection between notes.
@@ -70,6 +72,9 @@ type Cache interface {
 
 	// Flush writes any in-memory changes to persistent storage.
 	Flush() error
+
+	// Timestamp returns the timestamp of a persistent note or errors.
+	Timestamp(path Path) (time.Time, error)
 
 	// Subscribe allows clients to receive updates from the cache.
 	Subscribe() (<-chan Event, func(), error)

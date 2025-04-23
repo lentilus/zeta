@@ -43,6 +43,7 @@ func NewServer() (*server.Server, error) {
 		TextDocumentDefinition:  ls.textDocumentDefinition,
 		TextDocumentReferences:  ls.textDocumentReferences,
 		WorkspaceExecuteCommand: ls.workspaceExecuteCommand,
+		WorkspaceSymbol:         ls.workspaceSymbol,
 		Shutdown:                ls.shutdown,
 	}
 

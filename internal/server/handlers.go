@@ -268,6 +268,36 @@ func (s *Server) textDocumentReferences(
 	return locations, nil
 }
 
+func (s *Server) workspaceSymbol(
+	context *glsp.Context,
+	params *protocol.WorkspaceSymbolParams,
+) ([]protocol.SymbolInformation, error) {
+	max_results := 100
+	query := params.Query
+
+	notes, _ := s.cache.Paths()
+	counter := 0
+
+	var symbols []protocol.SymbolInformation
+
+	for _, note := range notes {
+		path := string(note)
+		if isSubsequence(query, path) {
+			uri, _ := s.PathToURI(path)
+			symbols = append(symbols, protocol.SymbolInformation{
+				Name:     path,
+				Kind:     protocol.SymbolKindFile,
+				Location: protocol.Location{URI: uri},
+			})
+			if counter == max_results {
+				break
+			}
+			counter += 1
+		}
+	}
+	return symbols, nil
+}
+
 func (s *Server) workspaceExecuteCommand(
 	context *glsp.Context,
 	params *protocol.ExecuteCommandParams,
@@ -334,4 +364,23 @@ func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 	}
 
 	return diagnostics
+}
+
+func isSubsequence(pattern, text string) bool {
+	// convert pattern to runes so we compare full Unicode codepoints
+	pr := []rune(pattern)
+	if len(pr) == 0 {
+		return true // empty pattern always matches
+	}
+
+	i := 0
+	for _, r := range text {
+		if r == pr[i] {
+			i++
+			if i == len(pr) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Zeta Graph</title>
     <style> body { margin:0 } #graph { width:100vw; height:100vh } </style>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
   </head>
 
@@ -14,7 +15,17 @@
       const graphData = { nodes: [], links: [] };
 
       // 2) Build Graph once
-      const Graph = ForceGraph()(document.getElementById('graph'))
+      const container = document.getElementById('graph');
+      const width = container.clientWidth
+      const height = container.clientHeight
+      const Graph = ForceGraph()(container)
+        .d3Force('charge', d3.forceManyBody().strength(-30))
+  
+        // add a centering force;
+        // strength 0.05 is very weak—unlinked nodes will drift only slightly
+        .d3Force('x', d3.forceX(width  / 2).strength(0.05))
+        .d3Force('y', d3.forceY(height / 2).strength(0.05))
+
         .nodeId('id')
         .graphData(graphData)
         .d3ReheatSimulation(false)
@@ -24,7 +35,7 @@
           const r = 5;
           ctx.beginPath();
           ctx.arc(node.x, node.y, r, 0, 2*Math.PI);
-          ctx.fillStyle = '#ccc';
+          ctx.fillStyle = '#999';
           ctx.fill();
           if (globalScale > 0.8 && node.label) {
             ctx.save();

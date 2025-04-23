@@ -187,8 +187,6 @@ func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
-	uri := params.TextDocument.URI
-	log.Printf("DidSave: %s\n", uri)
 	return nil
 }
 
@@ -197,7 +195,14 @@ func (s *Server) textDocumentDidClose(
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
 	uri := params.TextDocument.URI
-	log.Printf("Closed %s", uri)
+
+	path, _ := s.URItoPath(uri)
+	s.cache.Delete(cache.Path(path))
+
+	// Free ressources
+	delete(s.parsers, uri)
+	delete(s.docs, uri)
+
 	return nil
 }
 
@@ -243,8 +248,24 @@ func (s *Server) textDocumentReferences(
 	context *glsp.Context,
 	params *protocol.ReferenceParams,
 ) ([]protocol.Location, error) {
-	log.Printf("textDocumentReferences: %s", params.TextDocument.URI)
-	return nil, nil
+	uri := params.TextDocument.URI
+
+	path, _ := s.URItoPath(uri)
+
+	refs, err := s.cache.BackLinks(cache.Path(path))
+	if err != nil {
+		return nil, err
+	}
+
+	var locations []protocol.Location
+	for _, r := range refs {
+		locUri, _ := s.PathToURI(string(r.Src))
+		locRange := r.Range
+
+		locations = append(locations, protocol.Location{URI: locUri, Range: locRange})
+	}
+
+	return locations, nil
 }
 
 func (s *Server) workspaceExecuteCommand(

@@ -379,11 +379,7 @@ func (cache *HybridCache) sendEvent(e Event) error {
 	cache.subMu.RLock()
 	defer cache.subMu.RUnlock()
 	for _, ch := range cache.subscribers {
-		select {
-		case ch <- e:
-		default:
-			// Optionally handle full channel case.
-		}
+		ch <- e // NOTE: May block, but wont drop events
 	}
 	return nil
 }
@@ -393,7 +389,7 @@ func (cache *HybridCache) sendEvent(e Event) error {
 // future events and to cleanly disconnect when desired.
 func (cache *HybridCache) Subscribe() (<-chan Event, func(), error) {
 	// Create a buffered channel so that occasional slow consumers do not block event dispatch.
-	ch := make(chan Event, 10)
+	ch := make(chan Event, 100)
 
 	// Add the new subscriber channel to the cache's subscribers list.
 	cache.subMu.Lock()

@@ -91,7 +91,7 @@ type ParserPool struct {
 }
 
 // NewParserPool creates a ParserPool with n Parser instances for the specified language.
-func NewParserPool(n int, lang *sitter.Language) *ParserPool {
+func NewParserPool(n int) *ParserPool {
 	pp := &ParserPool{
 		pool: make(chan *Parser, n),
 		lang: lang,

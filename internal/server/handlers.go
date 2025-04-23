@@ -3,9 +3,12 @@ package lsp
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
+	"regexp"
 	"zeta/internal/cache"
 	"zeta/internal/parser"
+	"zeta/internal/scanner"
 	"zeta/internal/sitteradapter"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -37,6 +40,22 @@ func (s *Server) initialize(
 
 	s.root = *params.RootURI
 	log.Printf("Root: %s", s.root)
+
+	s.regCompiled, err = regexp.Compile(s.config.SelectRegex)
+	if err != nil {
+		return nil, err
+	}
+
+	parsers := parser.NewParserPool(10)
+	skip := func(path string, info fs.FileInfo) bool { return false }
+	callback := func(path string, document []byte) {
+		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
+		links, _ := extractLinks(nodes, document, path, s.regCompiled)
+		err := s.cache.Upsert(cache.Path(path), links)
+		log.Println(err)
+	}
+
+	go scanner.Scan(s.root[len("file://"):], skip, callback)
 
 	syncKind := protocol.TextDocumentSyncKindIncremental
 
@@ -86,7 +105,7 @@ func (s *Server) textDocumentDidOpen(
 	}
 
 	source, _ := s.URItoPath(uri)
-	links, err := extractLinks(nodes, doc, source)
+	links, err := extractLinks(nodes, doc, source, s.regCompiled)
 	if err != nil {
 		return err
 	}
@@ -141,7 +160,7 @@ func (s *Server) textDocumentDidChange(
 	}
 
 	source, _ := s.URItoPath(uri)
-	links, err := extractLinks(nodes, doc, source)
+	links, err := extractLinks(nodes, doc, source, s.regCompiled)
 	if err != nil {
 		return err
 	}
@@ -242,11 +261,18 @@ func extractLinks(
 	nodes []*sitter.Node,
 	document []byte,
 	source string,
+	reg *regexp.Regexp,
 ) ([]cache.Link, error) {
 	var links []cache.Link
 
 	for _, n := range nodes {
-		target, err := parser.Resolve(source, (*n).Content(document))
+		content := (*n).Content(document)
+		match := reg.FindSubmatch([]byte(content))[1]
+		if match == nil {
+			continue
+		}
+
+		target, err := parser.Resolve(source, string(match))
 		if err != nil {
 			continue
 		}

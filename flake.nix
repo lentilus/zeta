@@ -31,7 +31,8 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
       capabilities = vim.lsp.protocol.make_client_capabilities(),
       single_file_support = true,
       init_options = {
-        query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))'
+        query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))',
+        select_regex = '^\"(.*)\"$',
       },
       on_attach = function(client, bufnr)
         print("LSP attached to buffer", bufnr)

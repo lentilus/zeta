@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"zeta/lsp"
+	lsp "zeta/internal/server"
 
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 	"zeta/internal/cache"
 	"zeta/internal/parser"
@@ -18,12 +19,13 @@ type Config struct {
 }
 
 type Server struct {
-	root    string
-	handler *protocol.Handler
-	cache   cache.Cache
-	parsers map[string]*parser.Parser
-	docs    map[string][]byte
-	config  Config
+	root        string
+	handler     *protocol.Handler
+	cache       cache.Cache
+	parsers     map[string]*parser.Parser
+	docs        map[string][]byte
+	regCompiled *regexp.Regexp
+	config      Config
 }
 
 func NewServer() (*server.Server, error) {

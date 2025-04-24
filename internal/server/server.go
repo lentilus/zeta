@@ -23,6 +23,7 @@ type Server struct {
 	handler     *protocol.Handler
 	cache       cache.Cache
 	parsers     map[string]*parser.Parser
+	parserPool  *parser.ParserPool
 	docs        map[string][]byte
 	regCompiled *regexp.Regexp
 	graphAddr   string

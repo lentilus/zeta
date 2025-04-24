@@ -47,6 +47,7 @@ func (s *Server) initialize(
 	}
 
 	parsers := parser.NewParserPool(10)
+	s.parserPool = parsers
 	skip := func(path string, info fs.FileInfo) bool { return false }
 	callback := func(path string, document []byte) {
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
@@ -63,7 +64,7 @@ func (s *Server) initialize(
 	capabilities.TextDocumentSync = &protocol.TextDocumentSyncOptions{
 		OpenClose: &protocol.True,
 		Change:    &syncKind,
-		Save:      &protocol.True,
+		Save:      &protocol.SaveOptions{IncludeText: &protocol.True},
 	}
 
 	return protocol.InitializeResult{
@@ -126,6 +127,15 @@ func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
+	document := []byte(*params.Text)
+	uri := params.TextDocument.URI
+	path, _ := s.URItoPath(uri)
+
+	parsers := s.parserPool
+	nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
+	links, _ := extractLinks(nodes, document, path, s.regCompiled)
+	s.cache.Upsert(cache.Path(path), links)
+
 	return nil
 }
 

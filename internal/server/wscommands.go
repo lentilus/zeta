@@ -11,7 +11,7 @@ import (
 
 func (s *Server) graph(context *glsp.Context) error {
 	log.Println("called 'graph'")
-	uri := graph.ShowGraph("localhost:6213")
+	uri := graph.ShowGraph(":0")
 	context.Notify(
 		"window/showDocument",
 		protocol.ShowDocumentParams{

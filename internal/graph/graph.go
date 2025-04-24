@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 
@@ -53,15 +54,28 @@ var (
 // ShowGraph starts the HTTP and WebSocket server on the given address (e.g. ":8080").
 // It returns the URI where the graph can be viewed (e.g. "http://localhost:8080/").
 func ShowGraph(addr string) string {
+	// Listen on the given address (":0" means any free port)
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Could not start listener: %v", err)
+	}
+
+	// Extract the actual address (useful if addr was ":0")
+	actualAddr := l.Addr().String()
+
+	// Setup handlers
 	http.Handle("/", http.FileServer(http.FS(staticFiles)))
 	http.HandleFunc("/ws", handleWS)
+
+	// Start serving
 	go func() {
-		if err := http.ListenAndServe(addr, nil); err != nil {
+		if err := http.Serve(l, nil); err != nil {
 			log.Printf("Graph server error: %v", err)
 		}
 	}()
-	// Return UI URI
-	return "http://" + addr + "/static/"
+
+	// Return full URL to UI
+	return "http://" + actualAddr + "/static/"
 }
 
 // AddNode adds a node to the graph and broadcasts the change.

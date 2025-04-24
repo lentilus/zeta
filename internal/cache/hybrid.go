@@ -13,8 +13,8 @@ type noteID uint
 // linkID is used for identification.
 type linkID string
 
-// HybridCache holds temporary and persistent cache layers, an index, and subscriber data.
-type HybridCache struct {
+// Hybrid holds temporary and persistent cache layers, an index, and subscriber data.
+type Hybrid struct {
 	tmpLayer    layer
 	pstLayer    layer
 	idx         map[Path]noteID
@@ -24,9 +24,9 @@ type HybridCache struct {
 	mu          sync.RWMutex
 }
 
-// NewHybridCache creates a new HybridCache instance.
-func NewHybridCache() *HybridCache {
-	return &HybridCache{
+// NewHybrid creates a new Hybrid cache instance.
+func NewHybrid() *Hybrid {
+	return &Hybrid{
 		tmpLayer:    newHashmapLayer(),
 		pstLayer:    newHashmapLayer(),
 		idx:         make(map[Path]noteID),
@@ -36,7 +36,7 @@ func NewHybridCache() *HybridCache {
 }
 
 // assignIndexIfNeeded assigns an ID to a note if it isn't indexed yet.
-func (cache *HybridCache) assignIndexIfNeeded(path Path) {
+func (cache *Hybrid) assignIndexIfNeeded(path Path) {
 	if _, exists := cache.idx[path]; exists {
 		return
 	}
@@ -56,7 +56,7 @@ func (cache *HybridCache) assignIndexIfNeeded(path Path) {
 }
 
 // moveIndex transfers the index from one note to another.
-func (cache *HybridCache) moveIndex(start, dest Path) {
+func (cache *Hybrid) moveIndex(start, dest Path) {
 	id, exists := cache.idx[start]
 	if !exists {
 		panic("Does not exist")
@@ -75,7 +75,7 @@ func (cache *HybridCache) moveIndex(start, dest Path) {
 }
 
 // getNoteInfo retrieves note information from the temporary layer first, then persistent layer.
-func (cache *HybridCache) getNoteInfo(path Path) (note, bool) {
+func (cache *Hybrid) getNoteInfo(path Path) (note, bool) {
 	if info, ok := cache.tmpLayer.info(path); ok {
 		return info, true
 	}
@@ -83,7 +83,7 @@ func (cache *HybridCache) getNoteInfo(path Path) (note, bool) {
 }
 
 // removeIndexIfOrphan removes the note from the index and from the layer if it's missing and has no backlinks.
-func (cache *HybridCache) removeIndexIfOrphan(path Path, layer layer) error {
+func (cache *Hybrid) removeIndexIfOrphan(path Path, layer layer) error {
 	n, exists := layer.info(path)
 	if !exists {
 		return fmt.Errorf("%w: %s", ErrNoteNotFound, path)
@@ -121,7 +121,7 @@ func (cache *HybridCache) removeIndexIfOrphan(path Path, layer layer) error {
 }
 
 // ensureTargetExists verifies if a linked target exists or creates a missing note if not.
-func (cache *HybridCache) ensureTargetExists(src Path, link Link, layer layer) error {
+func (cache *Hybrid) ensureTargetExists(src Path, link Link, layer layer) error {
 	if link.Src != src {
 		return fmt.Errorf("%w: link source does not match with path", ErrInvalidLink)
 	}
@@ -140,7 +140,7 @@ func (cache *HybridCache) ensureTargetExists(src Path, link Link, layer layer) e
 }
 
 // prepareAllTargets loops over the links and ensures each target exists.
-func (cache *HybridCache) prepareAllTargets(src Path, links []Link, layer layer) error {
+func (cache *Hybrid) prepareAllTargets(src Path, links []Link, layer layer) error {
 	for _, link := range links {
 		if err := cache.ensureTargetExists(src, link, layer); err != nil {
 			return err
@@ -150,7 +150,7 @@ func (cache *HybridCache) prepareAllTargets(src Path, links []Link, layer layer)
 }
 
 // updateNoteInLayer upserts the note into the layer and updates its index.
-func (cache *HybridCache) updateNoteInLayer(n note, links []Link, layer layer) error {
+func (cache *Hybrid) updateNoteInLayer(n note, links []Link, layer layer) error {
 	if err := layer.upsert(n, links); err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (cache *HybridCache) updateNoteInLayer(n note, links []Link, layer layer) e
 }
 
 // computeDiffAndDispatchEvents computes the diff between pre-upsert and post-upsert link states and dispatches events.
-func (cache *HybridCache) computeDiffAndDispatchEvents(
+func (cache *Hybrid) computeDiffAndDispatchEvents(
 	notePath Path,
 	prevLinks, newLinks []Link,
 	layer layer,
@@ -205,7 +205,7 @@ func (cache *HybridCache) computeDiffAndDispatchEvents(
 }
 
 // applyUpsert performs the full upsert workflow and computes the diff correctly.
-func (cache *HybridCache) applyUpsert(n note, links []Link, layer layer) error {
+func (cache *Hybrid) applyUpsert(n note, links []Link, layer layer) error {
 	// Capture links state before the upsert.
 	prevLinks, _ := cache.forwardLinks(n.Path)
 
@@ -237,7 +237,7 @@ func (cache *HybridCache) applyUpsert(n note, links []Link, layer layer) error {
 }
 
 // Upsert inserts or updates a note in the persistent layer.
-func (cache *HybridCache) Upsert(path Path, links []Link) error {
+func (cache *Hybrid) Upsert(path Path, links []Link) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	n := note{Path: path, missing: false}
@@ -245,7 +245,7 @@ func (cache *HybridCache) Upsert(path Path, links []Link) error {
 }
 
 // UpsertTmp inserts or updates a note in the temporary layer.
-func (cache *HybridCache) UpsertTmp(path Path, links []Link) error {
+func (cache *Hybrid) UpsertTmp(path Path, links []Link) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	n := note{Path: path, missing: false}
@@ -253,7 +253,7 @@ func (cache *HybridCache) UpsertTmp(path Path, links []Link) error {
 }
 
 // applyDelete performs deletion operations on a note from the specified layer.
-func (cache *HybridCache) applyDelete(path Path, layer layer) error {
+func (cache *Hybrid) applyDelete(path Path, layer layer) error {
 	if _, exists := layer.info(path); !exists {
 		return fmt.Errorf("%w: %s", ErrNoteNotFound, path)
 	}
@@ -267,14 +267,14 @@ func (cache *HybridCache) applyDelete(path Path, layer layer) error {
 }
 
 // Delete removes a note from the persistent layer.
-func (cache *HybridCache) Delete(path Path) error {
+func (cache *Hybrid) Delete(path Path) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	return cache.applyDelete(path, cache.pstLayer)
 }
 
 // DeleteTmp removes a note from the temporary layer.
-func (cache *HybridCache) DeleteTmp(path Path) error {
+func (cache *Hybrid) DeleteTmp(path Path) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	return cache.applyDelete(path, cache.tmpLayer)
@@ -282,7 +282,7 @@ func (cache *HybridCache) DeleteTmp(path Path) error {
 
 // Paths returns the union of note paths in both persistent and temporary layers.
 // The temporary layer takes precedence.
-func (ps *HybridCache) Paths() ([]Path, error) {
+func (ps *Hybrid) Paths() ([]Path, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -310,7 +310,7 @@ func (ps *HybridCache) Paths() ([]Path, error) {
 	return result, nil
 }
 
-func (ps *HybridCache) forwardLinks(path Path) ([]Link, error) {
+func (ps *Hybrid) forwardLinks(path Path) ([]Link, error) {
 	if note, exists := ps.tmpLayer.info(path); exists && !note.missing {
 		return ps.tmpLayer.forwardLinks(path)
 	}
@@ -319,7 +319,7 @@ func (ps *HybridCache) forwardLinks(path Path) ([]Link, error) {
 
 // ForwardLinks returns the links originating from the note at the given path.
 // The temporary layer takes precedence if a non-missing note is found there.
-func (ps *HybridCache) ForwardLinks(path Path) ([]Link, error) {
+func (ps *Hybrid) ForwardLinks(path Path) ([]Link, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	return ps.forwardLinks(path)
@@ -329,7 +329,7 @@ func (ps *HybridCache) ForwardLinks(path Path) ([]Link, error) {
 // It merges backlinks from both layers. For backlinks coming from the persistent layer,
 // we check if the source note exists in the temporary layer. If it does, then its persistent backlink is
 // considered outdated (since tmp overrides pst) and is omitted.
-func (ps *HybridCache) backLinks(path Path) ([]Link, error) {
+func (ps *Hybrid) backLinks(path Path) ([]Link, error) {
 	tmpBLinks, err := ps.tmpLayer.backLinks(path)
 	if err != nil {
 		err = fmt.Errorf("failed to retrieve temporary backlinks for %s: %w", path, err)
@@ -353,13 +353,13 @@ func (ps *HybridCache) backLinks(path Path) ([]Link, error) {
 	return append(tmpBLinks, filteredPst...), nil
 }
 
-func (ps *HybridCache) BackLinks(path Path) ([]Link, error) {
+func (ps *Hybrid) BackLinks(path Path) ([]Link, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	return ps.backLinks(path)
 }
 
-func (cache *HybridCache) Timestamp(path Path) (time.Time, error) {
+func (cache *Hybrid) Timestamp(path Path) (time.Time, error) {
 	note, ok := cache.pstLayer.info(path)
 	if !ok {
 		return time.Now(), ErrNoteNotFound
@@ -368,12 +368,12 @@ func (cache *HybridCache) Timestamp(path Path) (time.Time, error) {
 }
 
 // Flush returns an error as the operation is not implemented.
-func (cache *HybridCache) Flush() error {
+func (cache *Hybrid) Flush() error {
 	return fmt.Errorf("Flush not implemented.")
 }
 
 // sendEvent validates and sends an event to all subscribers.
-func (cache *HybridCache) sendEvent(e Event) error {
+func (cache *Hybrid) sendEvent(e Event) error {
 	log.Printf("Sending event: %v", e)
 
 	cache.subMu.RLock()
@@ -387,7 +387,7 @@ func (cache *HybridCache) sendEvent(e Event) error {
 // Subscribe returns a read-only event channel and a close function which, when called,
 // unsubscribes the channel from the cache. This allows the subscriber to both receive all
 // future events and to cleanly disconnect when desired.
-func (cache *HybridCache) Subscribe() (<-chan Event, func(), error) {
+func (cache *Hybrid) Subscribe() (<-chan Event, func(), error) {
 	// Create a buffered channel so that occasional slow consumers do not block event dispatch.
 	ch := make(chan Event, 100)
 
@@ -474,7 +474,7 @@ func (cache *HybridCache) Subscribe() (<-chan Event, func(), error) {
 	return ch, closeFn, nil
 }
 
-func (cache *HybridCache) specialUpdate(path Path, oldLinks, newLinks []Link) bool {
+func (cache *Hybrid) specialUpdate(path Path, oldLinks, newLinks []Link) bool {
 	willremove, willadd, err := diff(path, oldLinks, newLinks)
 	if err != nil {
 		return false

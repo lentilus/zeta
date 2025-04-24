@@ -11,14 +11,22 @@ import (
 
 func (s *Server) graph(context *glsp.Context) error {
 	log.Println("called 'graph'")
-	uri := graph.ShowGraph(":0")
+	reuse := true
+	if len(s.graphAddr) == 0 {
+		s.graphAddr = graph.ShowGraph(":0")
+		reuse = false
+	}
 	context.Notify(
 		"window/showDocument",
 		protocol.ShowDocumentParams{
-			URI:      protocol.URI(uri),
+			URI:      protocol.URI(s.graphAddr),
 			External: &protocol.True,
 		},
 	)
+
+	if reuse {
+		return nil
+	}
 
 	updates, _, err := s.cache.Subscribe()
 	if err != nil {

@@ -25,6 +25,7 @@ type Server struct {
 	parsers     map[string]*parser.Parser
 	docs        map[string][]byte
 	regCompiled *regexp.Regexp
+	graphAddr   string
 	config      Config
 }
 

@@ -156,7 +156,8 @@ func (s *Server) textDocumentDidClose(
 }
 
 func (s *Server) shutdown(context *glsp.Context) error {
-	log.Println("Shutdown")
+	_ = s.parserPool.Close()
+	// TODO: close dangling parsers in s.parsers
 	return nil
 }
 

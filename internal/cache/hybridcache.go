@@ -15,8 +15,8 @@ type linkID string
 
 // HybridCache holds temporary and persistent cache layers, an index, and subscriber data.
 type HybridCache struct {
-	tmpLayer    cacheLayer
-	pstLayer    cacheLayer
+	tmpLayer    layer
+	pstLayer    layer
 	idx         map[Path]noteID
 	idxCounter  noteID
 	subscribers []chan Event
@@ -27,8 +27,8 @@ type HybridCache struct {
 // NewHybridCache creates a new HybridCache instance.
 func NewHybridCache() *HybridCache {
 	return &HybridCache{
-		tmpLayer:    newMapCacheLayer(),
-		pstLayer:    newMapCacheLayer(),
+		tmpLayer:    newHashmapLayer(),
+		pstLayer:    newHashmapLayer(),
 		idx:         make(map[Path]noteID),
 		idxCounter:  0,
 		subscribers: []chan Event{},
@@ -83,7 +83,7 @@ func (cache *HybridCache) getNoteInfo(path Path) (note, bool) {
 }
 
 // removeIndexIfOrphan removes the note from the index and from the layer if it's missing and has no backlinks.
-func (cache *HybridCache) removeIndexIfOrphan(path Path, layer cacheLayer) error {
+func (cache *HybridCache) removeIndexIfOrphan(path Path, layer layer) error {
 	n, exists := layer.info(path)
 	if !exists {
 		return fmt.Errorf("%w: %s", ErrNoteNotFound, path)
@@ -121,7 +121,7 @@ func (cache *HybridCache) removeIndexIfOrphan(path Path, layer cacheLayer) error
 }
 
 // ensureTargetExists verifies if a linked target exists or creates a missing note if not.
-func (cache *HybridCache) ensureTargetExists(src Path, link Link, layer cacheLayer) error {
+func (cache *HybridCache) ensureTargetExists(src Path, link Link, layer layer) error {
 	if link.Src != src {
 		return fmt.Errorf("%w: link source does not match with path", ErrInvalidLink)
 	}
@@ -140,7 +140,7 @@ func (cache *HybridCache) ensureTargetExists(src Path, link Link, layer cacheLay
 }
 
 // prepareAllTargets loops over the links and ensures each target exists.
-func (cache *HybridCache) prepareAllTargets(src Path, links []Link, layer cacheLayer) error {
+func (cache *HybridCache) prepareAllTargets(src Path, links []Link, layer layer) error {
 	for _, link := range links {
 		if err := cache.ensureTargetExists(src, link, layer); err != nil {
 			return err
@@ -150,7 +150,7 @@ func (cache *HybridCache) prepareAllTargets(src Path, links []Link, layer cacheL
 }
 
 // updateNoteInLayer upserts the note into the layer and updates its index.
-func (cache *HybridCache) updateNoteInLayer(n note, links []Link, layer cacheLayer) error {
+func (cache *HybridCache) updateNoteInLayer(n note, links []Link, layer layer) error {
 	if err := layer.upsert(n, links); err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (cache *HybridCache) updateNoteInLayer(n note, links []Link, layer cacheLay
 func (cache *HybridCache) computeDiffAndDispatchEvents(
 	notePath Path,
 	prevLinks, newLinks []Link,
-	layer cacheLayer,
+	layer layer,
 	sendEvents bool,
 ) error {
 	removed, added, err := diff(notePath, prevLinks, newLinks)
@@ -205,7 +205,7 @@ func (cache *HybridCache) computeDiffAndDispatchEvents(
 }
 
 // applyUpsert performs the full upsert workflow and computes the diff correctly.
-func (cache *HybridCache) applyUpsert(n note, links []Link, layer cacheLayer) error {
+func (cache *HybridCache) applyUpsert(n note, links []Link, layer layer) error {
 	// Capture links state before the upsert.
 	prevLinks, _ := cache.forwardLinks(n.Path)
 
@@ -253,7 +253,7 @@ func (cache *HybridCache) UpsertTmp(path Path, links []Link) error {
 }
 
 // applyDelete performs deletion operations on a note from the specified layer.
-func (cache *HybridCache) applyDelete(path Path, layer cacheLayer) error {
+func (cache *HybridCache) applyDelete(path Path, layer layer) error {
 	if _, exists := layer.info(path); !exists {
 		return fmt.Errorf("%w: %s", ErrNoteNotFound, path)
 	}

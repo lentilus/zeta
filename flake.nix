@@ -49,6 +49,18 @@ outputs = { self, nixpkgs, ... }@inputs: let
     exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
   '';
 
+  # New debugRelease command using the flake-built zeta binary
+  debugReleaseCmd = pkgs.writeShellScriptBin "debugRelease" ''
+    rm -rf /tmp/zeta-testing/*
+    mkdir -p /tmp/zeta-test-notes
+    mkdir -p /tmp/zeta-testing
+    # Copy the release zeta binary from the flake output
+    nix build .#zeta || exit
+    cp result/bin/zeta /tmp/zeta-testing/zeta
+    PATH="/tmp/zeta-testing:$PATH"
+    exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
+  '';
+
   vendorCmd = pkgs.writeShellScriptBin "vendor" ''
     echo "Populating _vendor directory..."
     rm -rf external/_vendor
@@ -64,7 +76,7 @@ outputs = { self, nixpkgs, ... }@inputs: let
       default = zeta;
       zeta    = zeta;
     };
-
+  
     devShells.${system}.default = pkgs.mkShell {
       shellHook = ''
         echo "== Welcome to zeta dev shell =="
@@ -78,6 +90,7 @@ outputs = { self, nixpkgs, ... }@inputs: let
         pkgs.typst
         pkgs.tinymist
         debugCmd
+        debugReleaseCmd
         vendorCmd
       ];
     };

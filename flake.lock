@@ -1,5 +1,29 @@
 {
   "nodes": {
+    "d3": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-iqqHq7VxdFfSOqyQ0jQ3vzNhZS9XkGd7BgQnIACdYNM=",
+        "type": "file",
+        "url": "https://d3js.org/d3.v5.min.js"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://d3js.org/d3.v5.min.js"
+      }
+    },
+    "forcegraph": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-wmQPuCs8YA3ldo4JG89H7QVHsJ689aKuhWNR2Do3EkU=",
+        "type": "file",
+        "url": "https://cdn.jsdelivr.net/npm/force-graph"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://cdn.jsdelivr.net/npm/force-graph"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1744536153,
@@ -18,7 +42,26 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "d3": "d3",
+        "forcegraph": "forcegraph",
+        "nixpkgs": "nixpkgs",
+        "tree-sitter-typst": "tree-sitter-typst"
+      }
+    },
+    "tree-sitter-typst": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1739197820,
+        "narHash": "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=",
+        "owner": "uben0",
+        "repo": "tree-sitter-typst",
+        "rev": "46cf4ded12ee974a70bf8457263b67ad7ee0379d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "uben0",
+        "repo": "tree-sitter-typst",
+        "type": "github"
       }
     }
   },

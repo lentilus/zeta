@@ -1,12 +1,12 @@
 package graph
 
 import (
-	"embed"
 	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"sync"
+	"zeta/external"
 
 	"github.com/gorilla/websocket"
 )
@@ -38,8 +38,7 @@ type IncrementalMessage struct {
 	Link  *Link      `json:"link,omitempty"`  // for add/deleteLink
 }
 
-//go:embed static/*
-var staticFiles embed.FS
+var staticFiles = external.Assets
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
@@ -75,7 +74,7 @@ func ShowGraph(addr string) string {
 	}()
 
 	// Return full URL to UI
-	return "http://" + actualAddr + "/static/"
+	return "http://" + actualAddr
 }
 
 // AddNode adds a node to the graph and broadcasts the change.

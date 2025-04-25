@@ -1,2 +1,4 @@
 bin
 testing
+result
+external/_vendor/*

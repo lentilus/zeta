@@ -4,14 +4,23 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	typst "zeta/tree-sitter-typst"
+	"unsafe"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+/*
+#cgo CFLAGS: -std=c11 -fPIC -I${SRCDIR}/../../external/_vendor/tree-sitter-typst/src
+
+#include "parser.c"
+#include "scanner.c"
+*/
+import "C"
+
+// Get the tree-sitter Language for this grammar.
 var (
-	lang        = sitter.NewLanguage(typst.Language())
+	typst       = unsafe.Pointer(C.tree_sitter_typst())
+	lang        = sitter.NewLanguage(typst)
 	captureName = "target"
 )
 

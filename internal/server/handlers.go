@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/url"
+	"os"
+	"path"
 	"regexp"
+	"time"
 	"zeta/internal/cache"
 	"zeta/internal/parser"
 	"zeta/internal/scanner"
@@ -39,7 +43,23 @@ func (s *Server) initialize(
 	}
 
 	s.root = *params.RootURI
-	log.Printf("Root: %s", s.root)
+
+	stateBaseDir, _ := getXDGStateHome("zeta")
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.root))
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create state directory: %w", err)
+	}
+
+	cacheFile := path.Join(cacheDir, "cache.json")
+	dump, err := os.ReadFile(cacheFile)
+	if err != nil {
+		s.cache = cache.NewHybrid()
+	} else {
+		s.cache, err = cache.Restore(dump)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	s.regCompiled, err = regexp.Compile(s.config.SelectRegex)
 	if err != nil {
@@ -48,15 +68,32 @@ func (s *Server) initialize(
 
 	parsers := parser.NewParserPool(10)
 	s.parserPool = parsers
-	skip := func(path string, info fs.FileInfo) bool { return false }
+	skip := func(path string, info fs.FileInfo) bool {
+		lastSeen, _ := s.cache.Timestamp(cache.Path(path))
+		return lastSeen.After(info.ModTime())
+	}
+	now := time.Now()
 	callback := func(path string, document []byte) {
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
 		links, _ := extractLinks(nodes, document, path, s.regCompiled)
-		err := s.cache.Upsert(cache.Path(path), links)
+		err := s.cache.Upsert(cache.Path(path), links, now)
 		log.Println(err)
 	}
 
 	go scanner.Scan(s.root[len("file://"):], skip, callback)
+
+	// Start cache dump routine.
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for range ticker.C {
+			log.Printf("Dumping cache to %s", cacheFile)
+			dump, _ := s.cache.Dump()
+			err := os.WriteFile(cacheFile, dump, 0644)
+			if err != nil {
+				log.Printf("Error during cache dump: %v", err)
+			}
+		}
+	}()
 
 	syncKind := protocol.TextDocumentSyncKindIncremental
 
@@ -131,10 +168,12 @@ func (s *Server) textDocumentDidSave(
 	uri := params.TextDocument.URI
 	path, _ := s.URItoPath(uri)
 
+	now := time.Now()
+
 	parsers := s.parserPool
 	nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
 	links, _ := extractLinks(nodes, document, path, s.regCompiled)
-	s.cache.Upsert(cache.Path(path), links)
+	s.cache.Upsert(cache.Path(path), links, now)
 
 	return nil
 }
@@ -377,7 +416,7 @@ func (s *Server) process(
 
 	// cache
 	path := cache.Path(source)
-	if err := s.cache.Upsert(path, links); err != nil {
+	if err := s.cache.UpsertTmp(path, links); err != nil {
 		return err
 	}
 

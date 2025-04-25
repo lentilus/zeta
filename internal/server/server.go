@@ -32,7 +32,6 @@ type Server struct {
 
 func NewServer() (*server.Server, error) {
 	ls := &Server{}
-	ls.cache = cache.NewHybrid()
 	ls.parsers = make(map[string]*parser.Parser)
 	ls.docs = make(map[string][]byte)
 	ls.handler = &protocol.Handler{

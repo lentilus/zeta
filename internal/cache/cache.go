@@ -50,7 +50,7 @@ var (
 // Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
 	// Upsert inserts or updates a note with its associated links.
-	Upsert(path Path, links []Link) error
+	Upsert(path Path, links []Link, time time.Time) error
 
 	// UpsertTmp inserts or updates a shadowing note with its associated links.
 	UpsertTmp(path Path, links []Link) error
@@ -78,4 +78,6 @@ type Cache interface {
 
 	// Subscribe allows clients to receive updates from the cache.
 	Subscribe() (<-chan Event, func(), error)
+
+	Dump() ([]byte, error)
 }

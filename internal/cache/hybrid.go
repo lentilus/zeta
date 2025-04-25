@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -22,6 +23,22 @@ type Hybrid struct {
 	subscribers []chan Event
 	subMu       sync.RWMutex
 	mu          sync.RWMutex
+}
+
+// dumpNote is the JSON‐serializable form of a single note, including its outgoing links.
+type dumpNote struct {
+	Path      Path      `json:"path"`
+	Missing   bool      `json:"missing"`
+	Timestamp time.Time `json:"timestamp"`
+	Links     []Link    `json:"links"`
+}
+
+// dumpPayload is the overall structure we marshal to JSON.
+type dumpPayload struct {
+	TmpLayer   []dumpNote      `json:"tmp_layer"`
+	PstLayer   []dumpNote      `json:"pst_layer"`
+	Idx        map[Path]noteID `json:"idx"`
+	IdxCounter noteID          `json:"idx_counter"`
 }
 
 // NewHybrid creates a new Hybrid cache instance.
@@ -237,10 +254,10 @@ func (cache *Hybrid) applyUpsert(n note, links []Link, layer layer) error {
 }
 
 // Upsert inserts or updates a note in the persistent layer.
-func (cache *Hybrid) Upsert(path Path, links []Link) error {
+func (cache *Hybrid) Upsert(path Path, links []Link, time time.Time) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	n := note{Path: path, missing: false}
+	n := note{Path: path, missing: false, Timestamp: time}
 	return cache.applyUpsert(n, links, cache.pstLayer)
 }
 
@@ -362,7 +379,7 @@ func (ps *Hybrid) BackLinks(path Path) ([]Link, error) {
 func (cache *Hybrid) Timestamp(path Path) (time.Time, error) {
 	note, ok := cache.pstLayer.info(path)
 	if !ok {
-		return time.Now(), ErrNoteNotFound
+		return time.Time{}, ErrNoteNotFound
 	}
 	return note.Timestamp, nil
 }
@@ -506,4 +523,103 @@ func (cache *Hybrid) specialUpdate(path Path, oldLinks, newLinks []Link) bool {
 	log.Printf("-->Index is currently: %s", fmt.Sprint(cache.idx))
 
 	return true
+}
+
+// Dump serializes the entire Hybrid cache (both layers + index) into JSON.
+// The output of Dump can later be passed into a Restore method to rebuild
+// the cache exactly as it was.
+func (c *Hybrid) Dump() ([]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	buildDump := func(layer layer) ([]dumpNote, error) {
+		paths, err := layer.paths()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]dumpNote, 0, len(paths))
+		for _, p := range paths {
+			info, _ := layer.info(p)
+			links, _ := layer.forwardLinks(p)
+			out = append(out, dumpNote{
+				Path:      p,
+				Missing:   info.missing,
+				Timestamp: info.Timestamp,
+				Links:     links,
+			})
+		}
+		return out, nil
+	}
+
+	tmpDump, err := buildDump(c.tmpLayer)
+	if err != nil {
+		return nil, err
+	}
+	pstDump, err := buildDump(c.pstLayer)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := dumpPayload{
+		TmpLayer:   tmpDump,
+		PstLayer:   pstDump,
+		Idx:        c.idx,
+		IdxCounter: c.idxCounter,
+	}
+
+	return json.MarshalIndent(payload, "", "  ")
+}
+
+func Restore(data []byte) (*Hybrid, error) {
+	var payload dumpPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cache dump: %w", err)
+	}
+
+	h := &Hybrid{
+		tmpLayer:    newHashmapLayer(),
+		pstLayer:    newHashmapLayer(),
+		idx:         payload.Idx,
+		idxCounter:  payload.IdxCounter,
+		subscribers: []chan Event{},
+	}
+
+	// Two-pass restoration: first notes, then links
+	restoreLayer := func(layer layer, notes []dumpNote) error {
+		// First: insert all notes without links
+		for _, dn := range notes {
+			n := note{
+				Path:      dn.Path,
+				missing:   dn.Missing,
+				Timestamp: dn.Timestamp,
+			}
+			if err := layer.upsert(n, nil); err != nil {
+				return fmt.Errorf("failed to insert note %s (pass 1): %w", dn.Path, err)
+			}
+		}
+
+		// Second: add the links
+		for _, dn := range notes {
+			n := note{
+				Path:      dn.Path,
+				missing:   dn.Missing,
+				Timestamp: dn.Timestamp,
+			}
+			if err := layer.upsert(n, dn.Links); err != nil {
+				return fmt.Errorf("failed to insert links for %s (pass 2): %w", dn.Path, err)
+			}
+		}
+
+		return nil
+	}
+
+	if err := restoreLayer(h.tmpLayer, payload.TmpLayer); err != nil {
+		return nil, fmt.Errorf("error restoring tmp layer: %w", err)
+	}
+
+	if err := restoreLayer(h.pstLayer, payload.PstLayer); err != nil {
+		return nil, fmt.Errorf("error restoring persistent layer: %w", err)
+	}
+
+	return h, nil
 }

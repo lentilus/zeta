@@ -44,7 +44,7 @@ outputs = { self, nixpkgs, ... }@inputs: let
     rm -rf /tmp/zeta-testing/*
     mkdir -p /tmp/zeta-test-notes
     mkdir -p /tmp/zeta-testing
-    go build -o /tmp/zeta-testing/zeta -gcflags=all=-N ./cmd/zeta || exit
+    go build -o /tmp/zeta-testing/zeta -gcflags=all=-N . || exit
     PATH="/tmp/zeta-testing:$PATH"
     exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
   '';

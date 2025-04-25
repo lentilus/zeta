@@ -1,4 +1,4 @@
-package lsp
+package server
 
 import (
 	"fmt"

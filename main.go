@@ -7,10 +7,9 @@ import (
 	"log"
 	"os"
 	"runtime"
-	lsp "zeta/internal/server"
+	"zeta/internal/server"
 
 	"github.com/tliron/commonlog"
-	_ "github.com/tliron/commonlog/simple"
 )
 
 // Version will be set during the build process using ldflags
@@ -52,7 +51,7 @@ func main() {
 	log.Println("Starting zeta LSP server...")
 
 	// Initialize the server
-	server, err := lsp.NewServer()
+	server, err := server.NewServer()
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}

@@ -15,6 +15,14 @@
       const container = document.getElementById('graph');
       const Graph = ForceGraph()(container)
         .nodeId('id')
+
+        .d3Force('charge', d3.forceManyBody().strength(-100))
+        .d3Force('x', d3.forceX(0).strength(0.07))
+        .d3Force('y', d3.forceY(0).strength(0.07))
+        .d3ReheatSimulation(false)
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.2)
+
         .graphData(graphData)
         .nodeCanvasObject((node, ctx, globalScale) => {
           const r = 5;

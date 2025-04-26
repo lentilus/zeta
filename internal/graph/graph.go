@@ -20,8 +20,9 @@ type GraphData struct {
 // Node represents a graph node.
 // ID must be unique.
 type Node struct {
-	ID    int    `json:"id"`
-	Label string `json:"label"`
+	ID     int    `json:"id"`
+	Label  string `json:"label"`
+	Grayed bool   `json:"grayed"`
 }
 
 // Link represents a directed edge between two nodes.

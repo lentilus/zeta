@@ -11,36 +11,33 @@
   <body>
     <div id="graph"></div>
     <script>
-      // 1) Single shared data object
       const graphData = { nodes: [], links: [] };
-
-      // 2) Build Graph once
       const container = document.getElementById('graph');
-      const width = container.clientWidth
-      const height = container.clientHeight
       const Graph = ForceGraph()(container)
-        .d3Force('charge', d3.forceManyBody().strength(-30))
-  
-        // add a centering force;
-        // strength 0.05 is very weak—unlinked nodes will drift only slightly
-        .d3Force('x', d3.forceX(0).strength(0.02))
-        .d3Force('y', d3.forceY(0).strength(0.02))
-
         .nodeId('id')
         .graphData(graphData)
-        .d3ReheatSimulation(false)
-        .d3AlphaDecay(0.02)
-        .d3VelocityDecay(0.2)
         .nodeCanvasObject((node, ctx, globalScale) => {
           const r = 5;
+          ctx.save();
+          // dim if grayed
+          if (node.grayed) {
+            ctx.globalAlpha = 0.2;
+          }
+          // draw circle
           ctx.beginPath();
-          ctx.arc(node.x, node.y, r, 0, 2*Math.PI);
+          ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
           ctx.fillStyle = '#999';
           ctx.fill();
+          ctx.restore();
+
+          // draw label when zoomed in
           if (globalScale > 0.8 && node.label) {
             ctx.save();
-            ctx.globalAlpha = Math.min(1,(globalScale-0.8)/0.2);
-            ctx.font = `${12/globalScale}px Sans-Serif`;
+            // match dimming for label
+            if (node.grayed) {
+              ctx.globalAlpha = 0.2;
+            }
+            ctx.font = `${12 / globalScale}px Sans-Serif`;
             ctx.textAlign = 'center';
             ctx.fillStyle = '#fff';
             ctx.fillText(node.label, node.x, node.y + r + 2);
@@ -54,32 +51,20 @@
           }
         });
 
-      // 3) WebSocket handler
       const ws = new WebSocket(`ws://${location.host}/ws`);
       ws.onmessage = ({ data }) => {
         const msg = JSON.parse(data);
-
         switch (msg.op) {
           case 'init':
-            // first time: replace arrays in place
             graphData.nodes = msg.graph.nodes;
             graphData.links = msg.graph.links;
             Graph.graphData(graphData);
             break;
-
           case 'add':
             if (msg.node) graphData.nodes.push(msg.node);
-            if (msg.link) {
-              // Option A: let force‑graph auto‑normalize the IDs…
-              graphData.links.push(msg.link);
-              // Option B: manually turn IDs into objects:
-              // const src = graphData.nodes.find(n=>n.id===msg.link.source);
-              // const tgt = graphData.nodes.find(n=>n.id===msg.link.target);
-              // graphData.links.push({ source: src, target: tgt });
-            }
+            if (msg.link) graphData.links.push(msg.link);
             Graph.graphData(graphData);
             break;
-
           case 'update':
             if (msg.node) {
               const n = graphData.nodes.find(n=>n.id===msg.node.id);
@@ -87,7 +72,6 @@
               Graph.graphData(graphData);
             }
             break;
-
           case 'deleteNode':
             if (msg.node) {
               const id = msg.node.id;
@@ -100,7 +84,6 @@
               Graph.graphData(graphData);
             }
             break;
-
           case 'deleteLink':
             if (msg.link) {
               const { source:s, target:t } = msg.link;

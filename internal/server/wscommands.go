@@ -42,16 +42,18 @@ func ProcessEvents(events <-chan cache.Event) {
 		switch ev.Operation {
 		case "createNote":
 			node := graph.Node{
-				ID:    ev.Note.ID,
-				Label: ev.Note.Path,
+				ID:     ev.Note.ID,
+				Label:  ev.Note.Path,
+				Grayed: ev.Note.Missing,
 			}
 			if err := graph.AddNode(node); err != nil {
 				log.Printf("graph.AddNode error: %v (event %+v)", err, ev)
 			}
 		case "updateNote":
 			node := graph.Node{
-				ID:    ev.Note.ID,
-				Label: ev.Note.Path,
+				ID:     ev.Note.ID,
+				Label:  ev.Note.Path,
+				Grayed: ev.Note.Missing,
 			}
 			if err := graph.UpdateNode(node); err != nil {
 				log.Printf("graph.UpdateNode error: %v (event %+v)", err, ev)

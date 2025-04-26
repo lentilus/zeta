@@ -44,6 +44,11 @@ func (s *Server) initialize(
 
 	s.root = *params.RootURI
 
+	s.regCompiled, err = regexp.Compile(s.config.SelectRegex)
+	if err != nil {
+		return nil, err
+	}
+
 	stateBaseDir, _ := getXDGStateHome("zeta")
 	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.root))
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
@@ -61,15 +66,14 @@ func (s *Server) initialize(
 		}
 	}
 
-	s.regCompiled, err = regexp.Compile(s.config.SelectRegex)
-	if err != nil {
-		return nil, err
-	}
-
 	parsers := parser.NewParserPool(10)
 	s.parserPool = parsers
+
+	// Note directory scanning + cache validation.
+	seenNotes := map[string]struct{}{}
 	skip := func(path string, info fs.FileInfo) bool {
 		lastSeen, _ := s.cache.Timestamp(cache.Path(path))
+		seenNotes[path] = struct{}{}
 		return lastSeen.After(info.ModTime())
 	}
 	now := time.Now()
@@ -77,13 +81,24 @@ func (s *Server) initialize(
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
 		links, _ := extractLinks(nodes, document, path, s.regCompiled)
 		err := s.cache.Upsert(cache.Path(path), links, now)
-		log.Println(err)
+		if err != nil {
+			log.Println(err)
+		}
 	}
-
-	go scanner.Scan(s.root[len("file://"):], skip, callback)
+	go func() {
+		scanner.Scan(s.root[len("file://"):], skip, callback)
+		notes, _ := s.cache.Paths()
+		for _, note := range notes {
+			if _, ok := seenNotes[string(note)]; !ok {
+				// Delete handles missing Targets correclty and won't remove them
+				s.cache.Delete(note)
+				log.Printf("Removed deleted note `%s` from cache", note)
+			}
+		}
+	}()
 
 	// Start cache dump routine.
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for range ticker.C {
 			log.Printf("Dumping cache to %s", cacheFile)

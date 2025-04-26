@@ -225,6 +225,7 @@ func (cache *Hybrid) computeDiffAndDispatchEvents(
 func (cache *Hybrid) applyUpsert(n note, links []Link, layer layer) error {
 	// Capture links state before the upsert.
 	prevLinks, _ := cache.forwardLinks(n.Path)
+	prevLayerLinks, _ := layer.forwardLinks(n.Path)
 
 	// Do special update if possible.
 	didSpecialUpdate := false
@@ -244,10 +245,18 @@ func (cache *Hybrid) applyUpsert(n note, links []Link, layer layer) error {
 
 	// Capture links state after the upsert.
 	newLinks, _ := cache.forwardLinks(n.Path)
+	newLayerLinks, _ := layer.forwardLinks(n.Path)
 
 	// Compute diff and dispatch appropriate events. Skip events if specialUpdate occured.
 	if err := cache.computeDiffAndDispatchEvents(n.Path, prevLinks, newLinks, layer, !didSpecialUpdate); err != nil {
 		return err
+	}
+
+	// Remove orphans from layer
+	removed, _, _ := diff(n.Path, prevLayerLinks, newLayerLinks)
+	for _, tgt := range removed {
+		log.Printf("Removing '%s' from cache", tgt)
+		cache.removeIndexIfOrphan(tgt, layer)
 	}
 
 	return nil

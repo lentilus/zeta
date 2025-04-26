@@ -2,6 +2,12 @@
 
 A highly performant language server for __zettelkasten__-style note-taking in __typst__ that provides real-time reference tracking and navigation.
 
+<p style="display: flex; justify-content: space-between; margin: 0;">
+  <img src="./_example/note.png" width="33.3%" />
+  <img src="./_example/graph.png" width="33.3%" />
+  <img src="./_example/workspace-symbols.png" width="33.3%" />
+</p>
+
 ## Highlights
 
 - **Perfomant**: Uses incremental parsing and concurrent processing for real-time updates

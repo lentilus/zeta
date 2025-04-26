@@ -32,7 +32,7 @@ func main() {
 
 	// Logging
 	if *logfileFlag != "" {
-		logFile, err := os.OpenFile(*logfileFlag, os.O_CREATE|os.O_APPEND, 0666)
+		logFile, err := os.OpenFile(*logfileFlag, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatalf("Failed to open log file: %v", err)
 		}

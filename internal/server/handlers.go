@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -49,8 +51,13 @@ func (s *Server) initialize(
 		return nil, err
 	}
 
+	// cache validity depends on the config
 	stateBaseDir, _ := getXDGStateHome("zeta")
-	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.root))
+	hash := sha256.New()
+	hash.Write([]byte(configJson))
+	configHash := hex.EncodeToString(hash.Sum(nil))
+
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.root), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create state directory: %w", err)
 	}

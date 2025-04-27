@@ -282,12 +282,24 @@ func (h *Hybrid) withChangeDetection(path Path, layer layer, op func() error) er
 	if err != nil {
 		return fmt.Errorf("changeDetection: prevLayer forwardLinks: %w", err)
 	}
+	prevMissing := h.noteMissing(path)
 	// execute operation
 	if err := op(); err != nil {
 		return err
 	}
 	// ensure index
 	h.assignIndex(path)
+
+	// record new missing-status & emit if changed
+	newMissing := h.noteMissing(path)
+	if prevMissing != newMissing {
+		log.Printf("Missing status of note %s changed!", string(path))
+		h.send(Event{
+			Operation: "updateNote",
+			Note:      NoteData{ID: int(h.idx[path]), Path: string(path), Missing: newMissing},
+		})
+	}
+
 	// capture new state
 	newLinks, err := h.forwardLinks(path)
 	if err != nil {
@@ -416,16 +428,29 @@ func (h *Hybrid) bootstrapSubscriber(chat chan Event) {
 // noteInfo retrieves a note from tmp or pst.
 func (h *Hybrid) noteInfo(p Path) (note, bool) {
 	if n, ok := h.tmp.info(p); ok {
+		n.missing = h.noteMissing(p)
 		return n, true
 	}
-	return h.pst.info(p)
+	if n, ok := h.pst.info(p); ok {
+		n.missing = h.noteMissing(p)
+		return n, true
+	}
+
+	return note{}, false
 }
 
 // noteMissing checks if a note is marked missing.
 func (h *Hybrid) noteMissing(p Path) bool {
-	if n, ok := h.noteInfo(p); ok {
-		return n.missing
+	tmpNote, tmpOk := h.tmp.info(p)
+	pstNote, pstOk := h.pst.info(p)
+
+	if tmpOk && !tmpNote.missing {
+		return false
 	}
+	if pstOk && !pstNote.missing {
+		return false
+	}
+
 	return true
 }
 

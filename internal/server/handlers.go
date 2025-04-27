@@ -80,11 +80,6 @@ func (s *Server) initialize(
 	seenNotes := map[string]struct{}{}
 	reuseCounter := 0
 	skip := func(path string, info fs.FileInfo) bool {
-		// Ignore hidden files
-		if path[0] == []byte(".")[0] {
-			return true
-		}
-
 		// Ignore non typst files
 		if path[len(path)-4:] != ".typ" {
 			return true
@@ -107,8 +102,11 @@ func (s *Server) initialize(
 			log.Println(err)
 		}
 	}
+
+    rootPath, _ := url.Parse(s.root)
+
 	go func() {
-		scanner.Scan(s.root[len("file://"):], skip, callback)
+		scanner.Scan(rootPath.Path, skip, callback)
 		notes, _ := s.cache.Paths()
 		for _, note := range notes {
 			if _, ok := seenNotes[string(note)]; !ok {
@@ -120,7 +118,7 @@ func (s *Server) initialize(
 	}()
 
 	// Start cache dump routine.
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for range ticker.C {
 			log.Printf("Dumping cache to %s", cacheFile)
@@ -167,7 +165,6 @@ func (s *Server) textDocumentDidChange(
 ) error {
 	uri := params.TextDocument.URI
 
-	log.Println("Text Document did change!")
 	p, ok := s.parsers[uri]
 	if !ok {
 		return fmt.Errorf("no parser for document %s", uri)

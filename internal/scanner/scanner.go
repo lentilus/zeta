@@ -2,91 +2,71 @@
 package scanner
 
 import (
-    "io/fs"
-    "log"
-    "os"
-    "path/filepath"
-    "strings"
+	"io/fs"
+	"log"
+	"os"
+	"path/filepath"
+	"sync"
 )
 
-// Scan walks the entire subtree under root.  Any file or directory
-// whose name begins with “.” is skipped entirely.  For each remaining
+// Scan walks the entire subtree under root. Any file or directory
+// whose name begins with “.” is skipped entirely. For each remaining
 // file, we apply your skip() predicate, and if that returns false
 // we read the file and invoke callback(relPath, contents).
+// Scan will only return once all callbacks have completed.
 func Scan(
-    root string,
-    skip func(relPath string, info fs.FileInfo) bool,
-    callback func(relPath string, document []byte),
+	root string,
+	skip func(relPath string, info fs.FileInfo) bool,
+	callback func(relPath string, document []byte),
 ) {
-    fileCh := make(chan string, 100)
+	fileCh := make(chan string, 100)
+	var wg sync.WaitGroup
 
-    // worker goroutine
-    go func() {
-        for rel := range fileCh {
-            full := filepath.Join(root, rel)
-            data, err := os.ReadFile(full)
-            if err != nil {
-                log.Println("scanner: read error:", full, err)
-                continue
-            }
-            callback(rel, data)
-        }
-    }()
+	// worker goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for path := range fileCh {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				log.Println("scanner: read error:", path, err)
+				continue
+			}
+			callback(path, data)
+		}
+	}()
 
-    log.Printf("scanner: starting WalkDir at %q", root)
-    err := filepath.WalkDir(root, func(fullPath string, d fs.DirEntry, err error) error {
-        if err != nil {
-            log.Println("scanner: walk error:", err)
-            return nil
-        }
+	log.Printf("scanner: starting WalkDir at %q", root)
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			log.Println("scanner: walk error:", err)
+			return nil
+		}
 
-        // get path relative to root
-        rel, err := filepath.Rel(root, fullPath)
-        if err != nil {
-            return nil
-        }
-        if rel == "." {
-            // the root itself
-            return nil
-        }
+		// skip hidden dirs entirely
+		if d.IsDir() {
+			log.Printf("scanner: descending into %q", path)
+			return nil
+		}
 
-        // log every directory we actually enter
-        if d.IsDir() {
-            log.Printf("scanner: descending into %q", rel)
-        }
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if skip(path, info) {
+			return nil
+		}
 
-        // skip any path component starting with "."
-        for _, part := range strings.Split(rel, string(os.PathSeparator)) {
-            if strings.HasPrefix(part, ".") {
-                if d.IsDir() {
-                    return filepath.SkipDir
-                }
-                return nil
-            }
-        }
+		// enqueue for reading
+		fileCh <- path
+		return nil
+	})
+	if err != nil {
+		log.Println("scanner: WalkDir finished with error:", err)
+	}
 
-        // if it’s a directory, keep recursing
-        if d.IsDir() {
-            return nil
-        }
-
-        // now it’s a file: apply your skip()
-        info, err := d.Info()
-        if err != nil {
-            return nil
-        }
-        if skip(rel, info) {
-            return nil
-        }
-
-        // finally, enqueue for reading
-        fileCh <- rel
-        return nil
-    })
-    if err != nil {
-        log.Println("scanner: WalkDir finished with error:", err)
-    }
-
-    // tell the worker we’re done
-    close(fileCh)
+	// no more files to send
+	close(fileCh)
+	// wait for the worker to finish consuming and calling back
+	wg.Wait()
 }

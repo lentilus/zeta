@@ -10,14 +10,13 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"regexp"
 	"time"
 	"zeta/internal/cache"
 	"zeta/internal/parser"
+	"zeta/internal/resolver"
 	"zeta/internal/scanner"
 	"zeta/internal/sitteradapter"
 
-	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
@@ -28,41 +27,33 @@ func (s *Server) initialize(
 ) (any, error) {
 	var config Config
 
+	// Config
 	configJson, err := json.Marshal(params.InitializationOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	if err := json.Unmarshal(configJson, &config); err != nil {
 		return nil, err
 	}
-
-	log.Printf("Config: %v", config)
 	s.config = config
+	log.Printf("Config: %v", config)
 
-	if params.RootURI == nil {
-		return nil, fmt.Errorf("no root URI")
-	}
+	// Root
+	rootUri, _ := url.Parse(*params.RootURI)
+	resolver.Configure(rootUri.Path, config.SelectRegex)
 
-	s.root = *params.RootURI
-
-	s.regCompiled, err = regexp.Compile(s.config.SelectRegex)
-	if err != nil {
-		return nil, err
-	}
-
-	// cache validity depends on the config
+	// Cache File
 	stateBaseDir, _ := getXDGStateHome("zeta")
 	hash := sha256.New()
 	hash.Write([]byte(configJson))
 	configHash := hex.EncodeToString(hash.Sum(nil))
-
-	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.root), configHash)
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(rootUri.Path), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create state directory: %w", err)
 	}
-
 	cacheFile := path.Join(cacheDir, "cache.json")
+
+	// Restore from cache.
 	dump, err := os.ReadFile(cacheFile)
 	if err != nil {
 		s.cache = cache.NewHybrid()
@@ -73,45 +64,44 @@ func (s *Server) initialize(
 		}
 	}
 
+	// Parsers
 	parsers := parser.NewParserPool(10)
 	s.parserPool = parsers
 
 	// Note directory scanning + cache validation.
-	seenNotes := map[string]struct{}{}
+	seenNotes := map[cache.Path]struct{}{}
 	reuseCounter := 0
-	skip := func(path string, info fs.FileInfo) bool {
-		// Ignore non typst files
-		if path[len(path)-4:] != ".typ" {
+	skip := func(absolutepath string, info fs.FileInfo) bool {
+		note, err := resolver.Resolve(absolutepath)
+		if err != nil {
+			log.Println(err)
 			return true
 		}
-
-		lastSeen, _ := s.cache.Timestamp(cache.Path(path))
-		seenNotes[path] = struct{}{}
-		skipping := lastSeen.After(info.ModTime())
-		if skipping {
-			reuseCounter += 1
-		}
-		return skipping
+		lastSeen, _ := s.cache.Timestamp(note.CachePath)
+		return lastSeen.After(info.ModTime())
 	}
 	now := time.Now()
-	callback := func(path string, document []byte) {
+	callback := func(absolutepath string, document []byte) {
+		note, err := resolver.Resolve(absolutepath)
+		if err != nil {
+			log.Printf("Error resolving %v", err)
+		}
+		seenNotes[note.CachePath] = struct{}{}
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
-		links, _ := extractLinks(nodes, document, path, s.regCompiled)
-		err := s.cache.Upsert(cache.Path(path), links, now)
+		links := resolver.ExtractLinks(note, nodes, document)
+		err = s.cache.Upsert(note.CachePath, links, now)
 		if err != nil {
 			log.Println(err)
 		}
 	}
 
-    rootPath, _ := url.Parse(s.root)
-
 	go func() {
-		scanner.Scan(rootPath.Path, skip, callback)
+		scanner.Scan(rootUri.Path, skip, callback)
 		notes, _ := s.cache.Paths()
 		for _, note := range notes {
-			if _, ok := seenNotes[string(note)]; !ok {
+			if _, ok := seenNotes[note]; !ok {
 				// Delete handles missing Targets correclty and won't remove them
-				s.cache.Delete(note)
+				// s.cache.Delete(note)
 			}
 		}
 		log.Printf("Reused %d notes from cache dump.", reuseCounter)
@@ -156,7 +146,8 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	return s.process(context, params.TextDocument.URI, params.TextDocument.Text)
+	note, _ := resolver.Resolve(params.TextDocument.URI)
+	return s.process(context, note, params.TextDocument.Text)
 }
 
 func (s *Server) textDocumentDidChange(
@@ -164,6 +155,7 @@ func (s *Server) textDocumentDidChange(
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
 	uri := params.TextDocument.URI
+	note, _ := resolver.Resolve(uri)
 
 	p, ok := s.parsers[uri]
 	if !ok {
@@ -192,23 +184,19 @@ func (s *Server) textDocumentDidChange(
 	// Store the updated document back in the server state.
 	s.docs[uri] = doc
 
-	return s.process(context, uri, string(doc))
+	return s.process(context, note, string(doc))
 }
 
 func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
+	note, _ := resolver.Resolve(params.TextDocument.URI)
 	document := []byte(*params.Text)
-	uri := params.TextDocument.URI
-	path, _ := s.URItoPath(uri)
 
-	now := time.Now()
-
-	parsers := s.parserPool
-	nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
-	links, _ := extractLinks(nodes, document, path, s.regCompiled)
-	s.cache.Upsert(cache.Path(path), links, now)
+	nodes, _ := s.parserPool.ParseAndQuery(document, []byte(s.config.Query))
+	links := resolver.ExtractLinks(note, nodes, document)
+	s.cache.Upsert(note.CachePath, links, time.Now())
 
 	return nil
 }
@@ -218,9 +206,9 @@ func (s *Server) textDocumentDidClose(
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
 	uri := params.TextDocument.URI
+	note, _ := resolver.Resolve(params.TextDocument.URI)
 
-	path, _ := s.URItoPath(uri)
-	s.cache.Delete(cache.Path(path))
+	s.cache.DeleteTmp(note.CachePath)
 
 	// Free ressources
 	delete(s.parsers, uri)
@@ -230,27 +218,20 @@ func (s *Server) textDocumentDidClose(
 }
 
 func (s *Server) shutdown(context *glsp.Context) error {
-	_ = s.parserPool.Close()
-	// TODO: close dangling parsers in s.parsers
-	return nil
+	return s.parserPool.Close()
 }
 
 func (s *Server) textDocumentDefinition(
 	context *glsp.Context,
 	params *protocol.DefinitionParams,
 ) (any, error) {
-	log.Println("Called go to definition")
-	log.Printf("textDocumentDefinition %s", params.TextDocument.URI)
+	note, _ := resolver.Resolve(params.TextDocument.URI)
 
-	uri := params.TextDocument.URI
-
-	path, _ := s.URItoPath(uri)
-
-	refs, err := s.cache.ForwardLinks(cache.Path(path))
+	refs, err := s.cache.ForwardLinks(note.CachePath)
 	if err != nil {
 		return nil, err
 	}
-	doc, ok := s.docs[uri]
+	doc, ok := s.docs[note.URI]
 	if !ok {
 		panic("Document not loaded")
 	}
@@ -260,8 +241,8 @@ func (s *Server) textDocumentDefinition(
 		index := params.TextDocumentPositionParams.Position.IndexIn(string(doc))
 
 		if index >= indexFrom && index <= indexTo {
-			locUri, _ := s.PathToURI(string(r.Tgt))
-			return protocol.Location{URI: locUri}, nil
+			target, _ := resolver.Resolve(r.Tgt)
+			return protocol.Location{URI: target.URI}, nil
 		}
 	}
 
@@ -272,21 +253,17 @@ func (s *Server) textDocumentReferences(
 	context *glsp.Context,
 	params *protocol.ReferenceParams,
 ) ([]protocol.Location, error) {
-	uri := params.TextDocument.URI
+	note, _ := resolver.Resolve(params.TextDocument.URI)
 
-	path, _ := s.URItoPath(uri)
-
-	refs, err := s.cache.BackLinks(cache.Path(path))
+	refs, err := s.cache.BackLinks(note.CachePath)
 	if err != nil {
 		return nil, err
 	}
 
 	var locations []protocol.Location
 	for _, r := range refs {
-		locUri, _ := s.PathToURI(string(r.Src))
-		locRange := r.Range
-
-		locations = append(locations, protocol.Location{URI: locUri, Range: locRange})
+		source, _ := resolver.Resolve(r.Src)
+		locations = append(locations, protocol.Location{URI: source.URI, Range: r.Range})
 	}
 
 	return locations, nil
@@ -296,7 +273,7 @@ func (s *Server) workspaceSymbol(
 	context *glsp.Context,
 	params *protocol.WorkspaceSymbolParams,
 ) ([]protocol.SymbolInformation, error) {
-	max_results := 100
+	max_results := 128
 	query := params.Query
 
 	notes, _ := s.cache.Paths()
@@ -307,16 +284,16 @@ func (s *Server) workspaceSymbol(
 	for _, note := range notes {
 		path := string(note)
 		if isSubsequence(query, path) {
-			uri, _ := s.PathToURI(path)
+			resolved, _ := resolver.Resolve(note)
 			symbols = append(symbols, protocol.SymbolInformation{
 				Name:     path,
 				Kind:     protocol.SymbolKindFile,
-				Location: protocol.Location{URI: uri},
+				Location: protocol.Location{URI: resolved.URI},
 			})
+			counter += 1
 			if counter == max_results {
 				break
 			}
-			counter += 1
 		}
 	}
 	return symbols, nil
@@ -330,134 +307,4 @@ func (s *Server) workspaceExecuteCommand(
 		return nil, s.graph(context)
 	}
 	return nil, nil
-}
-
-func extractLinks(
-	nodes []*sitter.Node,
-	document []byte,
-	source string,
-	reg *regexp.Regexp,
-) ([]cache.Link, error) {
-	var links []cache.Link
-
-	for _, n := range nodes {
-		content := (*n).Content(document)
-		match := reg.FindSubmatch([]byte(content))[1]
-		if match == nil {
-			continue
-		}
-
-		target, err := parser.Resolve(source, string(match))
-		if err != nil {
-			continue
-		}
-
-		l := cache.Link{
-			Range: protocol.Range{
-				Start: sitteradapter.TSPointToLSPPosition((*n).StartPoint(), string(document)),
-				End:   sitteradapter.TSPointToLSPPosition((*n).EndPoint(), string(document)),
-			},
-			Src: cache.Path(source),
-			Tgt: cache.Path(target),
-		}
-
-		links = append(links, l)
-	}
-
-	return links, nil
-}
-
-func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
-	var diagnostics []protocol.Diagnostic
-
-	for _, l := range links {
-		severity := protocol.DiagnosticSeverityInformation
-
-		d := protocol.Diagnostic{
-			Range:    l.Range,
-			Severity: &severity,
-			Message:  "> " + string(l.Tgt),
-		}
-
-		diagnostics = append(diagnostics, d)
-	}
-
-	return diagnostics
-}
-
-func isSubsequence(pattern, text string) bool {
-	// convert pattern to runes so we compare full Unicode codepoints
-	pr := []rune(pattern)
-	if len(pr) == 0 {
-		return true // empty pattern always matches
-	}
-
-	i := 0
-	for _, r := range text {
-		if r == pr[i] {
-			i++
-			if i == len(pr) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// process parses, queries, caches, and publishes diagnostics.
-func (s *Server) process(
-	ctx *glsp.Context,
-	uri protocol.DocumentUri,
-	document string,
-) error {
-	// ensure parser and doc state
-	p, ok := s.parsers[uri]
-	if !ok || p == nil {
-		var err error
-		p, err = parser.NewParser()
-		if err != nil {
-			return err
-		}
-		s.parsers[uri] = p
-	}
-	doc := []byte(document)
-	s.docs[uri] = doc
-
-	// parse
-	if err := p.Parse(doc); err != nil {
-		return err
-	}
-
-	// query
-	nodes, err := p.Query([]byte(s.config.Query), doc)
-	if err != nil {
-		return err
-	}
-
-	// build links
-	source, err := s.URItoPath(uri)
-	if err != nil {
-		return err
-	}
-	links, err := extractLinks(nodes, doc, source, s.regCompiled)
-	if err != nil {
-		return err
-	}
-
-	// cache
-	path := cache.Path(source)
-	if err := s.cache.UpsertTmp(path, links); err != nil {
-		return err
-	}
-
-	// 6) diagnostics
-	diagnostics := linkDiagnostics(links)
-	if len(diagnostics) > 0 {
-		ctx.Notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-			URI:         uri,
-			Diagnostics: diagnostics,
-		})
-	}
-
-	return nil
 }

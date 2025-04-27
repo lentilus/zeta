@@ -1,5 +1,9 @@
 local init_options = {
+  -- `query` defines the treesitter query used to find links. Be creative!
+  -- NOTE: the target capture must be named `target`!
   query = '(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))',
+  
+  -- `select_regex` selects a substring of the `target` capture as the reference.
   select_regex = '^"(.*)"$',
 }
 
@@ -34,7 +38,7 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
   callback = function()
     vim.lsp.start({
       name = "zeta",
-      cmd  = { "zeta" },
+      cmd  = { "zeta", "--logfile=/tmp/zeta.log"},
       filetypes = { "typst" },
       root_dir  = "/tmp/zeta-test-notes",
       capabilities = vim.lsp.protocol.make_client_capabilities(),

@@ -133,8 +133,6 @@ func DeleteLink(link Link) error {
 	for _, l := range graph.Links {
 		if !(l.Source == link.Source && l.Target == link.Target) {
 			newLinks = append(newLinks, l)
-		} else {
-			log.Println("DELETING a link")
 		}
 	}
 	graph.Links = newLinks

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -13,12 +14,10 @@ func Scan(
 	skip func(path string, info fs.FileInfo) bool,
 	callback func(path string, document []byte),
 ) {
-	log.Println("--SCANNING--")
 	fileChan := make(chan string, 100)
 	go func() {
 		for f := range fileChan {
-			log.Printf("Processing %s", f)
-			document, err := os.ReadFile(f)
+			document, err := os.ReadFile(path.Join(root, f))
 			if err != nil {
 				log.Println("Error reading file:", err)
 				continue
@@ -34,7 +33,6 @@ func Scan(
 			return nil
 		}
 		if d.IsDir() {
-			log.Printf("%s is a directory", path)
 			return nil
 		}
 
@@ -43,8 +41,9 @@ func Scan(
 			return nil
 		}
 
-		if !skip(path, info) {
-			fileChan <- path
+		notePath, _ := filepath.Rel(root, path)
+		if !skip(notePath, info) {
+			fileChan <- notePath
 		}
 
 		return nil

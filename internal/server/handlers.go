@@ -78,10 +78,25 @@ func (s *Server) initialize(
 
 	// Note directory scanning + cache validation.
 	seenNotes := map[string]struct{}{}
+	reuseCounter := 0
 	skip := func(path string, info fs.FileInfo) bool {
+		// Ignore hidden files
+		if path[0] == []byte(".")[0] {
+			return true
+		}
+
+		// Ignore non typst files
+		if path[len(path)-4:] != ".typ" {
+			return true
+		}
+
 		lastSeen, _ := s.cache.Timestamp(cache.Path(path))
 		seenNotes[path] = struct{}{}
-		return lastSeen.After(info.ModTime())
+		skipping := lastSeen.After(info.ModTime())
+		if skipping {
+			reuseCounter += 1
+		}
+		return skipping
 	}
 	now := time.Now()
 	callback := func(path string, document []byte) {
@@ -99,13 +114,13 @@ func (s *Server) initialize(
 			if _, ok := seenNotes[string(note)]; !ok {
 				// Delete handles missing Targets correclty and won't remove them
 				s.cache.Delete(note)
-				log.Printf("Removed deleted note `%s` from cache", note)
 			}
 		}
+		log.Printf("Reused %d notes from cache dump.", reuseCounter)
 	}()
 
 	// Start cache dump routine.
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
 		for range ticker.C {
 			log.Printf("Dumping cache to %s", cacheFile)
@@ -152,6 +167,7 @@ func (s *Server) textDocumentDidChange(
 ) error {
 	uri := params.TextDocument.URI
 
+	log.Println("Text Document did change!")
 	p, ok := s.parsers[uri]
 	if !ok {
 		return fmt.Errorf("no parser for document %s", uri)
@@ -339,8 +355,6 @@ func extractLinks(
 			continue
 		}
 
-		log.Printf("Treesitter range is: %v", (*n).Range())
-
 		l := cache.Link{
 			Range: protocol.Range{
 				Start: sitteradapter.TSPointToLSPPosition((*n).StartPoint(), string(document)),
@@ -350,7 +364,6 @@ func extractLinks(
 			Tgt: cache.Path(target),
 		}
 
-		log.Printf("Link is: %v", l)
 		links = append(links, l)
 	}
 
@@ -358,8 +371,6 @@ func extractLinks(
 }
 
 func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
-	log.Println("Showing diagnostics")
-
 	var diagnostics []protocol.Diagnostic
 
 	for _, l := range links {

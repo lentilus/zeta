@@ -78,7 +78,6 @@ func ProcessEvents(events <-chan cache.Event) {
 				Target: ev.Link.TargetID,
 			}
 
-			log.Println("Deleting Link")
 			if err := graph.DeleteLink(link); err != nil {
 				log.Printf("graph.DelteLink error: %v (event %+v)", err, ev)
 			}

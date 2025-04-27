@@ -70,9 +70,6 @@ type Cache interface {
 	// BackLinks returns the links pointing to the note at the given path.
 	BackLinks(path Path) ([]Link, error)
 
-	// Flush writes any in-memory changes to persistent storage.
-	Flush() error
-
 	// Timestamp returns the timestamp of a persistent note or errors.
 	Timestamp(path Path) (time.Time, error)
 

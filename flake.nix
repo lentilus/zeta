@@ -23,7 +23,7 @@ outputs = { self, nixpkgs, ... }@inputs: let
   system = "x86_64-linux";
   pkgs   = import nixpkgs { inherit system; };
 
-  zeta = pkgs.buildGoModule {
+  zeta = pkgs.buildGoModule rec {
     pname       = "zeta";
     version     = "0.3.0";
     src         = ./.;
@@ -38,6 +38,11 @@ outputs = { self, nixpkgs, ... }@inputs: let
       cp -r ${inputs.forcegraph} external/_vendor/force-graph.js
       cp ${inputs.d3} external/_vendor/d3.v5.min.js
     '';
+
+    ldflags = [
+      "-s" "-w" # minimize bin size
+      "-X main.Version=v${version}" # inject version
+    ];
   };
 
   debugCmd = pkgs.writeShellScriptBin "debug" ''

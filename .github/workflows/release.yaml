@@ -3,33 +3,54 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write  # Required for creating releases and uploading assets
-
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - name: Set up Nix
+        uses: cachix/install-nix-action@v26
         with:
-          go-version: 1.21
+          nix_path: nixpkgs=channel:nixpkgs-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Build with version
+      - name: Build Linux x86_64 binary
+        run: nix build .#packages.x86_64-linux.zeta
+
+      - name: Build Linux aarch64 binary
+        run: nix build .#packages.aarch64-linux.zeta
+
+      - name: Build macOS x86_64 binary
+        run: nix build .#packages.x86_64-darwin.zeta
+
+      - name: Build macOS aarch64 binary
+        run: nix build .#packages.aarch64-darwin.zeta
+
+      - name: Prepare binaries
         run: |
-          VERSION=$(git describe --tags --always --dirty)
-          go build -ldflags "-X main.Version=$VERSION" -o zeta ./cmd/zeta
+          mkdir dist
+          cp result/bin/zeta dist/zeta-linux-amd64
+          cp result-2/bin/zeta dist/zeta-linux-arm64
+          cp result-3/bin/zeta dist/zeta-macos-amd64
+          cp result-4/bin/zeta dist/zeta-macos-arm64
+          chmod +x dist/* || true
 
       - name: Create GitHub Release
-        id: release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: zeta
+          files: |
+            dist/zeta-linux-amd64
+            dist/zeta-linux-arm64
+            dist/zeta-macos-amd64
+            dist/zeta-macos-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

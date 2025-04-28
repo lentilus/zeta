@@ -75,8 +75,17 @@ func (s *Server) initialize(
 		if err != nil {
 			return true
 		}
-		lastSeen, _ := s.cache.Timestamp(note.CachePath)
-		return lastSeen.After(info.ModTime())
+		seenNotes[note.CachePath] = struct{}{}
+		lastSeen, err := s.cache.Timestamp(note.CachePath)
+		if err != nil {
+			return false
+		}
+
+		hasNotChanged := lastSeen.After(info.ModTime())
+		if !hasNotChanged {
+			log.Printf("Note %s was was changed", absolutepath)
+		}
+		return hasNotChanged
 	}
 	now := time.Now()
 	callback := func(absolutepath string, document []byte) {
@@ -84,7 +93,6 @@ func (s *Server) initialize(
 		if err != nil {
 			log.Printf("Unexpected error resolving %v", err)
 		}
-		seenNotes[note.CachePath] = struct{}{}
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
 		links := resolver.ExtractLinks(note, nodes, document)
 		err = s.cache.Upsert(note.CachePath, links, now)

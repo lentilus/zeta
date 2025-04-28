@@ -70,11 +70,9 @@ func (s *Server) initialize(
 
 	// Note directory scanning + cache validation.
 	seenNotes := map[cache.Path]struct{}{}
-	reuseCounter := 0
 	skip := func(absolutepath string, info fs.FileInfo) bool {
 		note, err := resolver.Resolve(absolutepath)
 		if err != nil {
-			log.Println(err)
 			return true
 		}
 		lastSeen, _ := s.cache.Timestamp(note.CachePath)
@@ -84,7 +82,7 @@ func (s *Server) initialize(
 	callback := func(absolutepath string, document []byte) {
 		note, err := resolver.Resolve(absolutepath)
 		if err != nil {
-			log.Printf("Error resolving %v", err)
+			log.Printf("Unexpected error resolving %v", err)
 		}
 		seenNotes[note.CachePath] = struct{}{}
 		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
@@ -101,10 +99,9 @@ func (s *Server) initialize(
 		for _, note := range notes {
 			if _, ok := seenNotes[note]; !ok {
 				// Delete handles missing Targets correclty and won't remove them
-				// s.cache.Delete(note)
+				s.cache.Delete(note)
 			}
 		}
-		log.Printf("Reused %d notes from cache dump.", reuseCounter)
 	}()
 
 	// Start cache dump routine.

@@ -41,7 +41,6 @@ func Configure(configRoot string, configSelectRegex string) error {
 }
 
 func Resolve(base any) (Note, error) {
-	log.Printf("Resolve was called with %v", base)
 	switch v := base.(type) {
 	case string:
 		url, err := url.Parse(v)
@@ -58,6 +57,18 @@ func Resolve(base any) (Note, error) {
 	default:
 		return Note{}, fmt.Errorf("Invalid base type.")
 	}
+}
+
+func IngoreDir(absolutepath string) bool {
+	rel, err := filepath.Rel(root, absolutepath)
+	if err != nil {
+		return true
+	}
+	clean := filepath.Clean(rel)
+	if clean == "." {
+		return false
+	}
+	return strings.HasPrefix(clean, ".")
 }
 
 func resolveAbsolute(absolutepath string) (Note, error) {

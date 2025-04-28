@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"zeta/internal/resolver"
 )
 
 // Scan walks the entire subtree under root. Any file or directory
@@ -43,8 +44,11 @@ func Scan(
 			return nil
 		}
 
-		// skip hidden dirs entirely
 		if d.IsDir() {
+			if resolver.IngoreDir(path) {
+				log.Printf("Skipping %q", path)
+				return fs.SkipDir
+			}
 			log.Printf("scanner: descending into %q", path)
 			return nil
 		}

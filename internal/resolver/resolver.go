@@ -104,7 +104,11 @@ func ResolveReference(source Note, reference string) (Note, error) {
 		return Note{}, fmt.Errorf("Invalid path.")
 	}
 
-	match := selectRegex.FindSubmatch([]byte(reference))[1]
+	matches := selectRegex.FindSubmatch([]byte(reference))
+	if len(matches) < 2 {
+		return Note{}, fmt.Errorf("Invalid reference")
+	}
+	match := matches[1]
 	if match == nil {
 		return Note{}, fmt.Errorf("Invalid reference")
 	}

@@ -74,6 +74,10 @@ func resolveAbsolute(absolutepath string) (Note, error) {
 		return Note{}, err
 	}
 
+	if filepath.Ext(cleaned) != ".typ" {
+		return Note{}, fmt.Errorf("Not a typst file.")
+	}
+
 	cachePath := cache.Path(rel)
 
 	return Note{

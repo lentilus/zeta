@@ -1,80 +1,140 @@
 package cache
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"time"
-
-	lsp "github.com/tliron/glsp/protocol_3_16"
 )
 
-type Path string
-
-// note represents a cached note.
-type note struct {
-	missing   bool
-	Path      Path
-	Timestamp time.Time
-}
-
-// Link represents a connection between notes.
-type Link struct {
-	Range lsp.Range
-	Src   Path
-	Tgt   Path
-}
-
-type LinkData struct {
-	SourceID int
-	TargetID int
-}
-
-type NoteData struct {
-	ID      int
-	Path    string
-	Missing bool
-}
-
-// Event describes an Update to a subscriber.
-type Event struct {
-	Operation string // "create/update/deleteNote" or "create/deleteLink"
-	Link      LinkData
-	Note      NoteData
-}
-
-// Errors for Cache to use
-var (
-	ErrInvalidLink  = errors.New("cache: invalid link, source mismatch")
-	ErrNoteNotFound = errors.New("cache: note not found")
-)
-
-// Cache provides methods to manipulate a cache of notes and links.
 type Cache interface {
-	// Upsert inserts or updates a note with its associated links.
-	Upsert(path Path, links []Link, time time.Time) error
+	SaveNote(path Path, forwardLinks []Link, saveTime time.Time) error
+	EditNote(path Path, forwardLinks []Link) error
+	DiscardNote(path Path) error
+	GetPaths() []Path
+	GetSaveTime(path Path) time.Time
+	NoteExists(path Path) bool
+	GetForwardLinks(path Path) ([]Link, error)
+	GetBackLinks(path Path) ([]Link, error)
+	Subscribe(ctx context.Context) (<-chan Event, error)
+	Dump() []byte
+}
 
-	// UpsertTmp inserts or updates a shadowing note with its associated links.
-	UpsertTmp(path Path, links []Link) error
+type cache struct {
+	mu         sync.RWMutex
+	graph      Graph              `json:"-"`
+	SavedNotes map[Path][]Link    `json:"saved_notes"`
+	SaveTimes  map[Path]time.Time `json:"save_times"`
+}
 
-	// Delete removes a note from the cache.
-	Delete(path Path) error
+func NewCache() Cache {
+	return &cache{
+		graph:      NewGraph(),
+		SavedNotes: make(map[Path][]Link),
+		SaveTimes:  make(map[Path]time.Time),
+	}
+}
 
-	// DeleteTmp removes a shadowing note from the cache.
-	DeleteTmp(path Path) error
+// RestoreCache takes a JSON dump (produced by Dump) and rebuilds both the maps and the graph by replaying SaveNote.
+func RestoreCache(dump []byte) (Cache, error) {
+	c := cache{}
+	if err := json.Unmarshal(dump, &c); err != nil {
+		return nil, err
+	}
 
-	// Paths retrieves all paths of notes.
-	Paths() ([]Path, error)
+	c.graph = NewGraph()
 
-	// ForwardLinks returns the links originating from the note at the given path.
-	ForwardLinks(path Path) ([]Link, error)
+	for path, links := range c.SavedNotes {
+		_, ok := c.SaveTimes[path]
+		if !ok {
+			return nil, errors.New("missing save-time for " + string(path))
+		}
+		if err := c.graph.UpsertNote(path, links); err != nil {
+			return nil, err
+		}
+		// SaveTimes already set by unmarshal
+	}
 
-	// BackLinks returns the links pointing to the note at the given path.
-	BackLinks(path Path) ([]Link, error)
+	return &c, nil
+}
 
-	// Timestamp returns the timestamp of a persistent note or errors.
-	Timestamp(path Path) (time.Time, error)
+func (c *cache) SaveNote(path Path, forwardLinks []Link, saveTime time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// Subscribe allows clients to receive updates from the cache.
-	Subscribe() (<-chan Event, func(), error)
+	if err := c.graph.UpsertNote(path, forwardLinks); err != nil {
+		return err
+	}
+	c.SavedNotes[path] = forwardLinks
+	c.SaveTimes[path] = saveTime
+	return nil
+}
 
-	Dump() ([]byte, error)
+func (c *cache) EditNote(path Path, forwardLinks []Link) error {
+	// no lock needed; graph handles its own concurrency
+	return c.graph.UpsertNote(path, forwardLinks)
+}
+
+func (c *cache) DiscardNote(path Path) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if links, ok := c.SavedNotes[path]; ok {
+		return c.graph.UpsertNote(path, links)
+	}
+	return c.graph.DeleteNote(path)
+}
+
+func (c *cache) GetPaths() []Path {
+	// no lock needed; graph handles its own concurrency
+	return c.graph.GetPaths()
+}
+
+func (c *cache) NoteExists(path Path) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	placeholder, err := c.graph.IsPlaceholder(path)
+	if err != nil {
+		return false
+	}
+	return !placeholder
+}
+
+func (c *cache) GetSaveTime(path Path) time.Time {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	t, ok := c.SaveTimes[path]
+	if !ok {
+		return time.Time{}
+	}
+	return t
+}
+
+func (c *cache) GetForwardLinks(path Path) ([]Link, error) {
+	// no lock needed; graph handles its own concurrency
+	return c.graph.GetForwardLinks(path)
+}
+
+func (c *cache) GetBackLinks(path Path) ([]Link, error) {
+	// no lock needed; graph handles its own concurrency
+	return c.graph.GetBackLinks(path)
+}
+
+func (c *cache) Subscribe(ctx context.Context) (<-chan Event, error) {
+	// no lock needed; graph handles its own concurrency
+	return c.graph.Subscribe(ctx)
+}
+
+func (c *cache) Dump() []byte {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	dump, err := json.Marshal(c)
+	if err != nil {
+		return nil
+	}
+	return dump
 }

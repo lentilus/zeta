@@ -52,8 +52,6 @@ func Resolve(base any) (Note, error) {
 			return resolveAbsolute(path)
 		}
 		return resolveAbsolute(filepath.Join(root, v))
-	case cache.Path:
-		return resolveAbsolute(filepath.Join(root, string(v)))
 	default:
 		return Note{}, fmt.Errorf("Invalid base type.")
 	}
@@ -139,7 +137,10 @@ func ResolveReference(source Note, reference string) (Note, error) {
 }
 
 func ExtractLinks(note Note, nodes []*sitter.Node, document []byte) []cache.Link {
-	var links []cache.Link
+	// Map to group ranges by target path, preserving insertion order
+	rangesMap := make(map[string][]protocol.Range)
+	order := make([]string, 0, len(nodes))
+
 	for _, n := range nodes {
 		reference := (*n).Content(document)
 
@@ -148,16 +149,29 @@ func ExtractLinks(note Note, nodes []*sitter.Node, document []byte) []cache.Link
 			continue
 		}
 
-		l := cache.Link{
-			Range: protocol.Range{
-				Start: sitteradapter.TSPointToLSPPosition((*n).StartPoint(), string(document)),
-				End:   sitteradapter.TSPointToLSPPosition((*n).EndPoint(), string(document)),
-			},
-			Src: note.CachePath,
-			Tgt: target.CachePath,
+		tgtPath := target.CachePath
+		// Compute the range for this reference
+		r := protocol.Range{
+			Start: sitteradapter.TSPointToLSPPosition((*n).StartPoint(), string(document)),
+			End:   sitteradapter.TSPointToLSPPosition((*n).EndPoint(), string(document)),
 		}
 
-		links = append(links, l)
+		// Initialize entry and record order if first time seeing this target
+		if _, exists := rangesMap[tgtPath]; !exists {
+			order = append(order, tgtPath)
+		}
+		rangesMap[tgtPath] = append(rangesMap[tgtPath], r)
 	}
+
+	// Build slice of links grouped by target
+	links := make([]cache.Link, 0, len(rangesMap))
+	for _, tgtPath := range order {
+		links = append(links, cache.Link{
+			Source: note.CachePath,
+			Target: tgtPath,
+			Ranges: rangesMap[tgtPath],
+		})
+	}
+
 	return links
 }

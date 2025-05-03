@@ -2,18 +2,26 @@ package server
 
 import (
 	"log"
-	"zeta/internal/cache"
-	"zeta/internal/graph"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
+func (s *Server) workspaceExecuteCommand(
+	context *glsp.Context,
+	params *protocol.ExecuteCommandParams,
+) (any, error) {
+	if params.Command == "graph" {
+		return nil, s.graph(context)
+	}
+	return nil, nil
+}
+
 func (s *Server) graph(context *glsp.Context) error {
 	log.Println("called 'graph'")
 	reuse := true
 	if len(s.graphAddr) == 0 {
-		s.graphAddr = graph.ShowGraph(":0")
+		// s.graphAddr = graph.ShowGraph(":0")
 		reuse = false
 	}
 	context.Notify(
@@ -28,14 +36,16 @@ func (s *Server) graph(context *glsp.Context) error {
 		return nil
 	}
 
-	updates, _, err := s.cache.Subscribe()
-	if err != nil {
-		return err
-	}
-
-	go ProcessEvents(updates)
+	// updates, _, err := s.cache.Subscribe()
+	// if err != nil {
+	// 	return err
+	// }
+	//
+	// go ProcessEvents(updates)
 	return nil
 }
+
+/*
 
 func ProcessEvents(events <-chan cache.Event) {
 	for ev := range events {
@@ -86,3 +96,4 @@ func ProcessEvents(events <-chan cache.Event) {
 		}
 	}
 }
+*/

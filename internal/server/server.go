@@ -1,9 +1,8 @@
 package server
 
 import (
-	"regexp"
 	"zeta/internal/cache"
-	"zeta/internal/parser"
+	"zeta/internal/manager"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
@@ -15,21 +14,15 @@ type Config struct {
 }
 
 type Server struct {
-	// root        string
-	handler     *protocol.Handler
-	cache       cache.Cache
-	parsers     map[string]*parser.Parser
-	parserPool  *parser.ParserPool
-	docs        map[string][]byte
-	regCompiled *regexp.Regexp
-	graphAddr   string
-	config      Config
+	handler   *protocol.Handler
+	cache     cache.Cache
+	manager   *manager.DocumentManager
+	graphAddr string
+	config    Config
 }
 
 func NewServer() (*server.Server, error) {
 	ls := &Server{}
-	ls.parsers = make(map[string]*parser.Parser)
-	ls.docs = make(map[string][]byte)
 	ls.handler = &protocol.Handler{
 		Initialize:              ls.initialize,
 		Initialized:             ls.initialized,

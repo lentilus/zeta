@@ -12,6 +12,7 @@ type Cache interface {
 	SaveNote(path Path, forwardLinks []Link, saveTime time.Time) error
 	EditNote(path Path, forwardLinks []Link) error
 	DiscardNote(path Path) error
+	DeleteNote(path Path) error
 	GetPaths() []Path
 	GetSaveTime(path Path) time.Time
 	NoteExists(path Path) bool
@@ -68,6 +69,19 @@ func (c *cache) SaveNote(path Path, forwardLinks []Link, saveTime time.Time) err
 	}
 	c.SavedNotes[path] = forwardLinks
 	c.SaveTimes[path] = saveTime
+	return nil
+}
+
+func (c *cache) DeleteNote(path Path) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := c.graph.DeleteNote(path)
+	if err != nil {
+		return err
+	}
+	delete(c.SavedNotes, path)
+	delete(c.SaveTimes, path)
 	return nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 	"zeta/internal/cache"
+	"zeta/internal/config"
 	"zeta/internal/manager"
 	"zeta/internal/parser"
 	"zeta/internal/resolver"
@@ -26,7 +27,7 @@ func (s *Server) initialize(
 	context *glsp.Context,
 	params *protocol.InitializeParams,
 ) (any, error) {
-	var config Config
+	var config config.Config
 
 	// Config
 	configJson, err := json.Marshal(params.InitializationOptions)

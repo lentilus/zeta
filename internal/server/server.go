@@ -2,23 +2,19 @@ package server
 
 import (
 	"zeta/internal/cache"
+	"zeta/internal/config"
 	"zeta/internal/manager"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
 )
 
-type Config struct {
-	Query       string `json:"query"        required:"true"`
-	SelectRegex string `json:"select_regex" required:"true"`
-}
-
 type Server struct {
 	handler   *protocol.Handler
 	cache     cache.Cache
 	manager   *manager.DocumentManager
 	graphAddr string
-	config    Config
+	config    config.Config
 }
 
 func NewServer() (*server.Server, error) {

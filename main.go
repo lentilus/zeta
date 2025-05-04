@@ -3,14 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"runtime"
 	"zeta/internal/server"
-
-	"github.com/tliron/commonlog"
-	_ "github.com/tliron/commonlog/simple"
 )
 
 // Version will be set during the build process using ldflags
@@ -19,15 +15,25 @@ var Version = "(dev) v0.0.0"
 func main() {
 	versionFlag := flag.Bool("version", false, "Print the version of the program")
 	logfileFlag := flag.String("logfile", "", "Path to log file")
+	dumpConfig := flag.String("dump", "", "Dump note metadata as json (path to config file)")
 	flag.Parse()
 
-	// Version tag
+	// Version
 	if *versionFlag {
-		fmt.Printf("zeta LSP server version %s\n", Version)
+		fmt.Printf("zeta version %s\n", Version)
 		return
 	}
 
-	// 4 Cores
+	// Dump command
+	if *dumpConfig != "" {
+		if err := runDump(*dumpConfig); err != nil {
+			log.Fatalf("dump failed: %v", err)
+		}
+		return
+	}
+
+	// LSP server
+	// 4 cores
 	runtime.GOMAXPROCS(4)
 
 	// Logging
@@ -41,18 +47,16 @@ func main() {
 		log.SetFlags(log.Ldate | log.Ltime | log.Llongfile)
 		log.Println("Starting zeta LSP server...")
 	} else {
-		log.SetOutput(io.Discard)
+		// discard logs by default
+		log.SetOutput(os.Stdout)
 	}
-	commonlog.Configure(2, nil) // Logger used by glsp
 
-	// Initialize the server
-	server, err := server.NewServer()
+	serverInstance, err := server.NewServer()
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
 
-	// Run the server
-	if err := server.RunStdio(); err != nil {
+	if err := serverInstance.RunStdio(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }

@@ -93,9 +93,6 @@ func publishDiagnostics(
 	uri string,
 	diagnostics []protocol.Diagnostic,
 ) {
-	if len(diagnostics) == 0 {
-		return
-	}
 	context.Notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 		URI:         uri,
 		Diagnostics: diagnostics,
@@ -103,8 +100,7 @@ func publishDiagnostics(
 }
 
 func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
-	var diagnostics []protocol.Diagnostic
-
+	diagnostics := []protocol.Diagnostic{} // empty, not nil
 	// Create one diagnostic per range entry for each link
 	severity := protocol.DiagnosticSeverityInformation
 	for _, l := range links {
@@ -117,6 +113,5 @@ func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 			diagnostics = append(diagnostics, d)
 		}
 	}
-
 	return diagnostics
 }

@@ -16,7 +16,7 @@ type graph struct {
 	nextSubID   int
 }
 
-// NewCache creates a new in-memory Cache.
+// NewGraph creates a new in-memory Graph.
 func NewGraph() Graph {
 	return &graph{
 		notes:       make(map[Path]*Note),
@@ -26,6 +26,7 @@ func NewGraph() Graph {
 	}
 }
 
+// UpsertNote inserts or updates a note, diffing links and emitting events only on topology changes.
 func (g *graph) UpsertNote(path Path, links []Link) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -38,104 +39,156 @@ func (g *graph) UpsertNote(path Path, links []Link) error {
 		g.emit(Event{Type: CreateNote, Note: &NoteEvent{Path: path, Placeholder: false}})
 	} else if note.Placeholder {
 		note.Placeholder = false
-		g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, Placeholder: false}})
+		g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, NewPath: path, Placeholder: false}})
 	}
 
-	// Build sets of existing and new targets
-	existing := g.forward[path]
-	newSet := make(map[Path]Link, len(links))
+	// Build maps of old and new links
+	oldLinks := g.forward[path]
+	if oldLinks == nil {
+		oldLinks = make(map[Path]Link)
+	}
+	newLinks := make(map[Path]Link, len(links))
 	for _, l := range links {
 		if l.Source != path {
 			return ErrInvalidLink
 		}
-		newSet[l.Target] = l
+		newLinks[l.Target] = l
 	}
 
-	// Try to detect placeholder rename optimization
-	if func() bool {
-		if len(existing) != 1 || len(newSet) != 1 {
-			return false
+	// Compute diffs: removals, additions, updates
+	var toRemove []Path
+	var toAdd, toUpdate []Link
+	for tgt, newL := range newLinks {
+		if _, found := oldLinks[tgt]; !found {
+			toAdd = append(toAdd, newL)
+		} else {
+			toUpdate = append(toUpdate, newL)
 		}
-		var oldT, newT Path
-		for t := range existing {
-			oldT = t
+	}
+	for tgt := range oldLinks {
+		if _, found := newLinks[tgt]; !found {
+			toRemove = append(toRemove, tgt)
 		}
-		for t := range newSet {
-			newT = t
-		}
-		ph, oldExists := g.notes[oldT]
-		_, newExists := g.notes[newT]
-		bl := g.backlinks[oldT]
-		if !oldExists || !ph.Placeholder || newExists || (bl != nil && len(bl) > 0) {
-			return false
-		}
-		// rename placeholder without link events
-		delete(g.notes, oldT)
-		delete(g.backlinks, oldT)
-		g.notes[newT] = &Note{Path: newT, Placeholder: true}
-		g.forward[path] = map[Path]Link{newT: newSet[newT]}
-		g.backlinks[newT] = map[Path]Link{path: newSet[newT]}
-		g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: newT, Placeholder: true}})
-		return true
-	}() {
+	}
+
+	// Try placeholder-rename optimization
+	if renameOptimized(path, toAdd, toRemove, g) {
 		return nil
 	}
 
-	// Remove all old links
-	for tgt := range existing {
-		delete(g.forward[path], tgt)
-		if bl := g.backlinks[tgt]; bl != nil {
-			delete(bl, path)
-			if len(bl) == 0 {
-				delete(g.backlinks, tgt)
-			}
+	// Apply removals
+	for _, tgt := range toRemove {
+		deleteLink(path, tgt, g)
+	}
+	// Apply additions
+	for _, l := range toAdd {
+		createLink(path, l.Target, l, g)
+	}
+	// Apply range-only updates (no events)
+	for _, l := range toUpdate {
+
+		if g.forward[path] == nil {
+			g.forward[path] = make(map[Path]Link)
 		}
-		g.emit(Event{Type: DeleteLink, Link: &LinkEvent{Source: path, Target: tgt}})
-		// drop orphan placeholder
-		if ph, ok := g.notes[tgt]; ok && ph.Placeholder {
-			if _, hasBack := g.backlinks[tgt]; !hasBack {
-				delete(g.notes, tgt)
-				g.emit(Event{Type: DeleteNote, Note: &NoteEvent{Path: tgt, Placeholder: true}})
-			}
+		g.forward[path][l.Target] = l
+		if g.backlinks[l.Target] == nil {
+			g.backlinks[l.Target] = make(map[Path]Link)
 		}
+		g.backlinks[l.Target][path] = l
 	}
 
-	// Add all new links
-	g.forward[path] = make(map[Path]Link, len(newSet))
-	for tgt, l := range newSet {
-		// placeholder if missing
-		if _, ok := g.notes[tgt]; !ok {
-			g.notes[tgt] = &Note{Path: tgt, Placeholder: true}
-			g.emit(Event{Type: CreateNote, Note: &NoteEvent{Path: tgt, Placeholder: true}})
-		}
-		g.forward[path][tgt] = l
-		if g.backlinks[tgt] == nil {
-			g.backlinks[tgt] = make(map[Path]Link)
-		}
-		g.backlinks[tgt][path] = l
-		g.emit(Event{Type: CreateLink, Link: &LinkEvent{Source: path, Target: tgt}})
-	}
 	return nil
+}
+
+// deleteLink removes a single link and emits events, cleaning up placeholders.
+func deleteLink(src, tgt Path, g *graph) {
+	delete(g.forward[src], tgt)
+	if bl := g.backlinks[tgt]; bl != nil {
+		delete(bl, src)
+		if len(bl) == 0 {
+			delete(g.backlinks, tgt)
+		}
+	}
+	g.emit(Event{Type: DeleteLink, Link: &LinkEvent{Source: src, Target: tgt}})
+	if ph, ok := g.notes[tgt]; ok && ph.Placeholder {
+		if _, hasBack := g.backlinks[tgt]; !hasBack {
+			delete(g.notes, tgt)
+			g.emit(Event{Type: DeleteNote, Note: &NoteEvent{Path: tgt, Placeholder: true}})
+		}
+	}
+}
+
+// createLink adds a single link and emits events, creating placeholders as needed.
+func createLink(src, tgt Path, l Link, g *graph) {
+	if _, ok := g.notes[tgt]; !ok {
+		g.notes[tgt] = &Note{Path: tgt, Placeholder: true}
+		g.emit(Event{Type: CreateNote, Note: &NoteEvent{Path: tgt, Placeholder: true}})
+	}
+	if g.forward[src] == nil {
+		g.forward[src] = make(map[Path]Link)
+	}
+	g.forward[src][tgt] = l
+	if g.backlinks[tgt] == nil {
+		g.backlinks[tgt] = make(map[Path]Link)
+	}
+	g.backlinks[tgt][src] = l
+	g.emit(Event{Type: CreateLink, Link: &LinkEvent{Source: src, Target: tgt}})
+}
+
+// renameOptimized detects single-link placeholder renames and handles them.
+func renameOptimized(path Path, add []Link, remove []Path, g *graph) bool {
+	if len(add) == 1 && len(remove) == 1 {
+		oT := remove[0]
+		nT := add[0].Target
+		ph, existed := g.notes[oT]
+		_, newExists := g.notes[nT]
+		bl := g.backlinks[oT]
+		if existed && ph.Placeholder && !newExists && len(bl) == 1 {
+			// remove the old forward/backlink
+			delete(g.forward[path], oT)
+			delete(g.backlinks[oT], path)
+
+			// switch placeholder from oT to nT
+			delete(g.notes, oT)
+			g.notes[nT] = &Note{Path: nT, Placeholder: true}
+
+			if g.forward[path] == nil {
+				g.forward[path] = make(map[Path]Link)
+			}
+			g.forward[path][nT] = add[0]
+			if g.backlinks[nT] == nil {
+				g.backlinks[nT] = make(map[Path]Link)
+			}
+			g.backlinks[nT][path] = add[0]
+
+			g.emit(
+				Event{Type: UpdateNote, Note: &NoteEvent{Path: oT, NewPath: nT, Placeholder: true}},
+			)
+			return true
+		}
+	}
+	return false
 }
 
 func (g *graph) DeleteNote(path Path) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// check existence
 	n, exists := g.notes[path]
 	if !exists {
 		return ErrNoteNotFound
 	}
-	// if has backlinks, mark placeholder (missing)
 	if bl := g.backlinks[path]; bl != nil && len(bl) > 0 {
 		if !n.Placeholder {
 			n.Placeholder = true
-			g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, Placeholder: true}})
+			g.emit(
+				Event{
+					Type: UpdateNote,
+					Note: &NoteEvent{Path: path, NewPath: path, Placeholder: true},
+				},
+			)
 		}
 		return nil
 	}
-	// safe to delete
-	// remove forward links
 	if fl := g.forward[path]; fl != nil {
 		for tgt := range fl {
 			delete(g.backlinks[tgt], path)
@@ -143,7 +196,6 @@ func (g *graph) DeleteNote(path Path) error {
 		}
 		delete(g.forward, path)
 	}
-	// remove note
 	delete(g.notes, path)
 	g.emit(Event{Type: DeleteNote, Note: &NoteEvent{Path: path, Placeholder: n.Placeholder}})
 	return nil
@@ -203,9 +255,36 @@ func (g *graph) Subscribe(ctx context.Context) (<-chan Event, error) {
 	sid := g.nextSubID
 	g.nextSubID++
 	g.subscribers[sid] = ch
+
+	notes := make([]*NoteEvent, 0, len(g.notes))
+	for _, note := range g.notes {
+		notes = append(notes, &NoteEvent{Path: note.Path, Placeholder: note.Placeholder})
+	}
+	links := make([]*LinkEvent, 0)
+	for src, targets := range g.forward {
+		for tgt := range targets {
+			links = append(links, &LinkEvent{Source: src, Target: tgt})
+		}
+	}
 	g.mu.Unlock()
 
-	// remove on context done
+	go func() {
+		for _, ne := range notes {
+			select {
+			case ch <- Event{Type: CreateNote, Note: ne}:
+			case <-ctx.Done():
+				return
+			}
+		}
+		for _, le := range links {
+			select {
+			case ch <- Event{Type: CreateLink, Link: le}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	go func() {
 		<-ctx.Done()
 		g.mu.Lock()
@@ -213,16 +292,13 @@ func (g *graph) Subscribe(ctx context.Context) (<-chan Event, error) {
 		close(ch)
 		g.mu.Unlock()
 	}()
+
 	return ch, nil
 }
 
-// emit sends event to all subscribers non-blocking
+// emit sends events to all subscribers (non-blocking).
 func (g *graph) emit(event Event) {
 	for _, ch := range g.subscribers {
-		select {
-		case ch <- event:
-		default:
-			// drop if not ready
-		}
+		ch <- event
 	}
 }

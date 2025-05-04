@@ -43,7 +43,11 @@ type LinkEvent struct {
 	Target Path `json:"target"`
 }
 
-type NoteEvent = Note
+type NoteEvent = struct {
+	Path        Path
+	NewPath     Path // only populated on updates
+	Placeholder bool
+}
 
 // Event describes a single change in the cache.
 type Event struct {

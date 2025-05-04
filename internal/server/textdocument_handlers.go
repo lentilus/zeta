@@ -81,7 +81,7 @@ func (s *Server) textDocumentDidClose(
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if err := s.cache.DiscardNote(note.URI); err != nil {
+	if err := s.cache.DiscardNote(note.RelativePath); err != nil {
 		return err
 	}
 	s.manager.Release(note.URI)

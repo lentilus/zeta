@@ -80,9 +80,6 @@ func (s *Server) initialize(
 		}
 		seenNotes[note.CachePath] = struct{}{}
 		lastSeen := s.cache.GetSaveTime(note.CachePath)
-		if err != nil {
-			return false
-		}
 
 		hasNotChanged := lastSeen.After(info.ModTime())
 		if !hasNotChanged {
@@ -97,7 +94,10 @@ func (s *Server) initialize(
 		if err != nil {
 			log.Printf("Unexpected error resolving %v", err)
 		}
-		nodes, _ := parsers.ParseAndQuery(document, []byte(s.config.Query))
+		nodes, err := parsers.ParseAndQuery(document, []byte(s.config.Query))
+		if err != nil {
+			log.Printf("Unexpected error parsing %v", err)
+		}
 		links := resolver.ExtractLinks(note, nodes, document)
 		err = s.cache.SaveNote(note.CachePath, links, now)
 		if err != nil {

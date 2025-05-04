@@ -31,7 +31,7 @@ func (s *Server) textDocumentDefinition(
 				target, _ := resolver.Resolve(ref.Target)
 				if s.cache.NoteExists(target.RelativePath) {
 					doc, _ := s.manager.GetDocument(target.URI)
-					if len(doc) > 0 {
+					if len(string(doc)) > 0 {
 						return protocol.Location{
 							URI: target.URI,
 							Range: protocol.Range{

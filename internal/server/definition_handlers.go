@@ -30,7 +30,10 @@ func (s *Server) textDocumentDefinition(
 			if index >= indexFrom && index <= indexTo {
 				target, _ := resolver.Resolve(ref.Target)
 				if s.cache.NoteExists(target.RelativePath) {
-					return protocol.Location{URI: target.URI}, nil
+					doc, _ := s.manager.GetDocument(target.URI)
+					if len(doc) > 0 {
+						return protocol.Location{URI: target.URI}, nil
+					}
 				}
 				context.Notify(
 					"window/showDocument",

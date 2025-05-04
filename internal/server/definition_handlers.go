@@ -29,13 +29,26 @@ func (s *Server) textDocumentDefinition(
 
 			if index >= indexFrom && index <= indexTo {
 				target, _ := resolver.Resolve(ref.Target)
-				return protocol.Location{
-					URI: target.URI,
-					Range: protocol.Range{
-						Start: protocol.Position{Line: 0, Character: 0},
-						End:   protocol.Position{Line: 0, Character: 0},
+				if s.cache.NoteExists(target.RelativePath) {
+					doc, _ := s.manager.GetDocument(target.URI)
+					if len(doc) > 0 {
+						return protocol.Location{
+							URI: target.URI,
+							Range: protocol.Range{
+								Start: protocol.Position{Line: 0, Character: 0},
+								End:   protocol.Position{Line: 0, Character: 0},
+							},
+						}, nil
+					}
+				}
+				context.Notify(
+					"window/showDocument",
+					protocol.ShowDocumentParams{
+						URI:      protocol.URI(target.URI),
+						External: &protocol.False,
 					},
-				}, nil
+				)
+				return nil, nil
 			}
 		}
 	}

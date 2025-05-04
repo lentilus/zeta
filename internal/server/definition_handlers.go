@@ -29,7 +29,16 @@ func (s *Server) textDocumentDefinition(
 
 			if index >= indexFrom && index <= indexTo {
 				target, _ := resolver.Resolve(ref.Target)
-				return protocol.Location{URI: target.URI}, nil
+				if s.cache.NoteExists(target.RelativePath) {
+					return protocol.Location{URI: target.URI}, nil
+				}
+				context.Notify(
+					"window/showDocument",
+					protocol.ShowDocumentParams{
+						URI:      protocol.URI(target.URI),
+						External: &protocol.False,
+					},
+				)
 			}
 		}
 	}

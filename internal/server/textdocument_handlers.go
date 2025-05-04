@@ -42,7 +42,7 @@ func (s *Server) textDocumentDidChange(
 			return fmt.Errorf("unexpected change event type %T", raw)
 		}
 		if err := s.manager.ApplyIncrementalEdit(note.URI, change); err != nil {
-			return fmt.Errorf("unexpected error during edit:", err)
+			return fmt.Errorf("unexpected error during edit: %v", err)
 		}
 	}
 	links, err := s.manager.GetLinks(note.URI, s.config.Query)

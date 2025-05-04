@@ -1,7 +1,10 @@
 package server
 
 import (
+	"context"
 	"log"
+	"zeta/internal/cache"
+	"zeta/internal/graph"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -17,14 +20,14 @@ func (s *Server) workspaceExecuteCommand(
 	return nil, nil
 }
 
-func (s *Server) graph(context *glsp.Context) error {
+func (s *Server) graph(ctx *glsp.Context) error {
 	log.Println("called 'graph'")
 	reuse := true
 	if len(s.graphAddr) == 0 {
-		// s.graphAddr = graph.ShowGraph(":0")
+		s.graphAddr = graph.ShowGraph(":0")
 		reuse = false
 	}
-	context.Notify(
+	ctx.Notify(
 		"window/showDocument",
 		protocol.ShowDocumentParams{
 			URI:      protocol.URI(s.graphAddr),
@@ -36,64 +39,72 @@ func (s *Server) graph(context *glsp.Context) error {
 		return nil
 	}
 
-	// updates, _, err := s.cache.Subscribe()
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// go ProcessEvents(updates)
+	updates, err := s.cache.Subscribe(context.Background())
+	if err != nil {
+		return err
+	}
+
+	go ProcessEvents(updates)
 	return nil
 }
 
-/*
-
 func ProcessEvents(events <-chan cache.Event) {
+	idCounter := 0
+	index := map[cache.Path]int{}
+	pathToId := func(path cache.Path) int {
+		if id, ok := index[path]; ok {
+			return id
+		}
+		idCounter++
+		index[path] = idCounter
+		return idCounter
+	}
+
+	noteToNode := func(note cache.NoteEvent) graph.Node {
+		node := graph.Node{
+			Label:  note.Path,
+			Grayed: note.Placeholder,
+			ID:     pathToId(note.Path),
+		}
+		return node
+	}
+
+	LinkToLink := func(link cache.LinkEvent) graph.Link {
+		return graph.Link{
+			Source: pathToId(link.Source),
+			Target: pathToId(link.Target),
+		}
+	}
+
 	for ev := range events {
-		switch ev.Operation {
-		case "createNote":
-			node := graph.Node{
-				ID:     ev.Note.ID,
-				Label:  ev.Note.Path,
-				Grayed: ev.Note.Missing,
-			}
-			if err := graph.AddNode(node); err != nil {
+		switch ev.Type {
+		case cache.CreateNote:
+			if err := graph.AddNode(noteToNode(*ev.Note)); err != nil {
 				log.Printf("graph.AddNode error: %v (event %+v)", err, ev)
 			}
-		case "updateNote":
-			node := graph.Node{
-				ID:     ev.Note.ID,
-				Label:  ev.Note.Path,
-				Grayed: ev.Note.Missing,
-			}
-			if err := graph.UpdateNode(node); err != nil {
+		case cache.UpdateNote:
+			id, _ := index[ev.Note.Path]
+			delete(index, ev.Note.Path)
+			ev.Note.Path = ev.Note.NewPath
+			index[ev.Note.NewPath] = id
+
+			if err := graph.UpdateNode(noteToNode(*ev.Note)); err != nil {
 				log.Printf("graph.UpdateNode error: %v (event %+v)", err, ev)
 			}
-
-		case "deleteNote":
-			if err := graph.DeleteNode(ev.Note.ID); err != nil {
+		case cache.DeleteNote:
+			if err := graph.DeleteNode(pathToId(ev.Note.Path)); err != nil {
 				log.Printf("graph.DeleteNode error: %v (event %+v)", err, ev)
 			}
-		case "createLink":
-			link := graph.Link{
-				Source: ev.Link.SourceID,
-				Target: ev.Link.TargetID,
-			}
-
-			if err := graph.AddLink(link); err != nil {
+		case cache.CreateLink:
+			if err := graph.AddLink(LinkToLink(*ev.Link)); err != nil {
 				log.Printf("graph.AddLink error: %v (event %+v)", err, ev)
 			}
-		case "deleteLink":
-			link := graph.Link{
-				Source: ev.Link.SourceID,
-				Target: ev.Link.TargetID,
-			}
-
-			if err := graph.DeleteLink(link); err != nil {
+		case cache.DeleteLink:
+			if err := graph.DeleteLink(LinkToLink(*ev.Link)); err != nil {
 				log.Printf("graph.DelteLink error: %v (event %+v)", err, ev)
 			}
 		default:
-			log.Printf("unknown Operation %q in event %+v", ev.Operation, ev)
+			log.Printf("unknown Operation %q in event %+v", ev.Type, ev)
 		}
 	}
 }
-*/

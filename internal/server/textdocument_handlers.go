@@ -26,7 +26,7 @@ func (s *Server) textDocumentDidOpen(
 	if err := s.cache.EditNote(note.RelativePath, links); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, linkDiagnostics(links))
+	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -52,7 +52,7 @@ func (s *Server) textDocumentDidChange(
 	if err := s.cache.EditNote(note.RelativePath, links); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, linkDiagnostics(links))
+	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (s *Server) textDocumentDidSave(
 	if err := s.cache.SaveNote(note.RelativePath, links, time.Now()); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, linkDiagnostics(links))
+	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -99,11 +99,18 @@ func publishDiagnostics(
 	})
 }
 
-func linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
+func (s *Server) linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 	diagnostics := []protocol.Diagnostic{} // empty, not nil
 	// Create one diagnostic per range entry for each link
-	severity := protocol.DiagnosticSeverityInformation
+	info := protocol.DiagnosticSeverityInformation
+	warn := protocol.DiagnosticSeverityWarning
 	for _, l := range links {
+		var severity protocol.DiagnosticSeverity
+		if s.cache.NoteExists(l.Target) {
+			severity = info
+		} else {
+			severity = warn
+		}
 		for _, r := range l.Ranges {
 			d := protocol.Diagnostic{
 				Range:    r,

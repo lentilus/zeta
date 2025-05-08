@@ -44,7 +44,7 @@
         version = "0.3.0";
         src = ./.;
         buildInputs = [ pkgs.go ];
-        vendorHash = "sha256-MR40dtOpVQ8MCAEDiwl1S2rz/HAvfpcaRiTdy/irOVA=";
+        vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
 
         doCheck = false;
         patchPhase = ''

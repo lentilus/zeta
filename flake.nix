@@ -34,27 +34,38 @@
     );
   in {
     packages = forAllSystems ({ pkgs, system }: let
-      zeta = pkgs.buildGoModule rec {
-        pname       = "zeta";
-        version     = "0.3.0";
-        src         = ./.;
-        buildInputs = [ pkgs.go ];
-        vendorHash  = "sha256-MR40dtOpVQ8MCAEDiwl1S2rz/HAvfpcaRiTdy/irOVA=";
+    zeta = pkgs.buildGoModule rec {
+      pname   = "zeta";
+      version = "0.3.0";
+      src     = ./.;
 
-        doCheck = false;
-        patchPhase = ''
-          mkdir -p external/_vendor
-          rm -rf .gitignore
-          cp -r ${inputs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-          cp -r ${inputs.forcegraph} external/_vendor/force-graph.js
-          cp ${inputs.d3} external/_vendor/d3.v5.min.js
-        '';
+      buildInputs = [
+        pkgs.go
+        pkgs.gcc
+        pkgs.glibc.static
+        pkgs.glibcLocales
+      ];
 
-        ldflags = [
-          "-s" "-w" # minimize bin size
-          "-X main.Version=v${version}" # inject version
-        ];
-      };
+      CGO_ENABLED = "1";
+
+      ldflags = [
+        "-s" "-w"
+        "-linkmode external"
+        "-extldflags -static"
+        "-X main.Version=v${version}"
+      ];
+
+      vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
+      doCheck    = false;
+
+      patchPhase = ''
+        mkdir -p external/_vendor
+        rm -rf .gitignore
+        cp -r ${inputs.tree-sitter-typst} external/_vendor/tree-sitter-typst
+        cp -r ${inputs.forcegraph}   external/_vendor/force-graph.js
+        cp    ${inputs.d3}           external/_vendor/d3.v5.min.js
+      '';
+    };
     in {
       default = zeta;
       zeta = zeta;

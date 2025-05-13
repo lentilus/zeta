@@ -40,21 +40,36 @@
   in {
     packages = forAllSystems ({ pkgs, system }: rec {
       zeta = pkgs.buildGoModule rec {
-        pname = "zeta";
+        pname   = "zeta";
         version = "0.3.0";
-        src = ./.;
-        buildInputs = [ pkgs.go ];
-        vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
+        src     = ./.;
 
-        doCheck = false;
+        buildInputs = [
+          pkgs.go
+          pkgs.gcc
+          pkgs.glibc.static
+          pkgs.glibcLocales
+        ];
+
+        env.CGO_ENABLED = "1";
+
+        ldflags = [
+          "-s" "-w"
+          "-linkmode external"
+          "-extldflags -static"
+          "-X main.Version=v${version}"
+        ];
+
+        vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
+        doCheck    = false;
+
         patchPhase = ''
           mkdir -p external/_vendor
+          rm -rf .gitignore
           cp -r ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-          cp ${pkgs.force-graph} external/_vendor/force-graph.js
-          cp ${pkgs.d3} external/_vendor/d3.v5.min.js
+          cp -r ${pkgs.force-graph}   external/_vendor/force-graph.js
+          cp    ${pkgs.d3}           external/_vendor/d3.v5.min.js
         '';
-
-        ldflags = [ "-s" "-w" "-X main.Version=v${version}" ];
       };
 
       default = zeta;

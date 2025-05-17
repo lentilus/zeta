@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -27,27 +26,27 @@ func (s *Server) initialize(
 	context *glsp.Context,
 	params *protocol.InitializeParams,
 ) (any, error) {
-	var config config.Config
-
-	// Config
-	configJson, err := json.Marshal(params.InitializationOptions)
+	config, err := config.Load(params.InitializationOptions)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(configJson, &config); err != nil {
-		return nil, err
-	}
+
 	s.config = config
 	log.Printf("Config: %v", config)
 
 	// Root
 	rootUri, _ := url.Parse(*params.RootURI)
-	resolver.Configure(rootUri.Path, config.SelectRegex)
+	resolver.Configure(
+		rootUri.Path,
+		config.SelectRegex,
+		config.FileExtensions,
+		config.DefaultExtension,
+	)
 
 	// Cache File
 	stateBaseDir, _ := getXDGStateHome("zeta")
 	hash := sha256.New()
-	hash.Write([]byte(configJson))
+	hash.Write([]byte("FIXME!!!"))
 	configHash := hex.EncodeToString(hash.Sum(nil))
 	cacheDir := path.Join(stateBaseDir, url.PathEscape(rootUri.Path), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {

@@ -22,16 +22,27 @@ type Note struct {
 }
 
 var (
-	configured  bool = false
-	root        string
-	selectRegex *regexp.Regexp
+	configured       bool = false
+	root             string
+	selectRegex      *regexp.Regexp
+	fileExtenstions  []string
+	defaultExtension string
 )
 
-func Configure(configRoot string, configSelectRegex string) error {
+func Configure(
+	configRoot string,
+	configSelectRegex string,
+	configFileExtensions []string,
+	configDefaultExtension string,
+) error {
 	if configured {
 		panic("Resolver already configured.")
 	}
+
 	root = configRoot
+	fileExtenstions = configFileExtensions
+	defaultExtension = configDefaultExtension
+
 	var err error
 	selectRegex, err = regexp.Compile(configSelectRegex)
 	if err != nil {
@@ -83,8 +94,16 @@ func resolveAbsolute(absolutepath string) (Note, error) {
 		return Note{}, err
 	}
 
-	if filepath.Ext(cleaned) != ".typ" {
-		return Note{}, fmt.Errorf("Not a typst file.")
+	found := false
+	ext := filepath.Ext(cleaned)
+	for _, e := range fileExtenstions {
+		if e == ext {
+			found = true
+		}
+	}
+
+	if !found {
+		return Note{}, fmt.Errorf("No valid file extension.")
 	}
 
 	cachePath := cache.Path(rel)
@@ -121,9 +140,9 @@ func ResolveReference(source Note, reference string) (Note, error) {
 		return Note{}, fmt.Errorf("Cannot reference directories.")
 	}
 
-	// Add `.typ` extension if none is specified.
+	// Add default extension if none is specified.
 	if filepath.Ext(reference) == "" {
-		reference += ".typ"
+		reference += defaultExtension
 	}
 
 	// Check if path should be relative to note.

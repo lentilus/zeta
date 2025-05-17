@@ -5,6 +5,8 @@ local init_options = {
   
   -- `select_regex` selects a substring of the `target` capture as the reference.
   select_regex = '^"(.*)"$',
+  default_extension = ".typ",
+  file_extensions = {".typ"},
 }
 
 local on_attach = function(client, bufnr)

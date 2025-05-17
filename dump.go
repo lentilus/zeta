@@ -23,7 +23,7 @@ func runDump(configPath string) error {
 		return err
 	}
 
-	resolver.Configure(cfg.Root, cfg.SelectRegex)
+	resolver.Configure(cfg.Root, cfg.SelectRegex, cfg.FileExtensions, cfg.DefaultExtension)
 
 	c := cache.NewCache()
 	now := time.Now()

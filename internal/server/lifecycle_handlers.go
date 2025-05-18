@@ -98,8 +98,8 @@ func (s *Server) initialize(
 		if err != nil {
 			log.Printf("Unexpected error parsing %v", err)
 		}
-		links := resolver.ExtractLinks(note, nodes, document)
-		err = s.cache.SaveNote(note.CachePath, links, now)
+		links, meta := resolver.ExtractLinksAndMeta(note, nodes, document)
+		err = s.cache.SaveNote(note.CachePath, links, meta, now)
 		if err != nil {
 			log.Println(err)
 		}

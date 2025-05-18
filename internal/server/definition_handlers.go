@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
@@ -88,10 +89,16 @@ func (s *Server) workspaceSymbol(
 
 	for _, note := range notes {
 		path := string(note)
-		if isSubsequence(query, path) {
+		var name string
+		if title, err := s.cache.GetMetaData(note, "title"); err != nil {
+			name = path
+		} else {
+			name = title
+		}
+		if isSubsequence(query, name) {
 			resolved, _ := resolver.Resolve(note)
 			symbols = append(symbols, protocol.SymbolInformation{
-				Name:     path,
+				Name:     name,
 				Kind:     protocol.SymbolKindFile,
 				Location: protocol.Location{URI: resolved.URI},
 			})
@@ -106,6 +113,8 @@ func (s *Server) workspaceSymbol(
 
 func isSubsequence(pattern, text string) bool {
 	// convert pattern to runes so we compare full Unicode codepoints
+	pattern = strings.ToLower(pattern)
+	text = strings.ToLower(text)
 	pr := []rune(pattern)
 	if len(pr) == 0 {
 		return true // empty pattern always matches

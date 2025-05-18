@@ -56,7 +56,7 @@ func (p *Parser) Parse(document []byte) error {
 }
 
 // Query runs the provided query against the previously parsed tree, applying predicate filtering.
-func (p *Parser) Query(query []byte, document []byte) ([]*sitter.Node, error) {
+func (p *Parser) Query(query []byte, document []byte) (map[string][]*sitter.Node, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -118,7 +118,10 @@ func NewParserPool(n int) *ParserPool {
 // Parse performs a one-time parse of the document using one Parser from the pool.
 // It creates a new syntax tree from the document, runs the provided query (with predicate filtering)
 // and returns all matches.
-func (pp *ParserPool) ParseAndQuery(document []byte, query []byte) ([]*sitter.Node, error) {
+func (pp *ParserPool) ParseAndQuery(
+	document []byte,
+	query []byte,
+) (map[string][]*sitter.Node, error) {
 	// Acquire a parser from the pool.
 	p := <-pp.pool
 	defer func() { pp.pool <- p }()
@@ -149,7 +152,7 @@ func executeQuery(
 	lang *sitter.Language,
 	query []byte,
 	document []byte,
-) ([]*sitter.Node, error) {
+) (map[string][]*sitter.Node, error) {
 	q, err := sitter.NewQuery(query, lang)
 	if err != nil {
 		return nil, err
@@ -157,7 +160,7 @@ func executeQuery(
 	qc := sitter.NewQueryCursor()
 	qc.Exec(q, root)
 
-	var nodes []*sitter.Node
+	nodes := make(map[string][]*sitter.Node)
 	var captures []sitter.QueryCapture
 
 	for {
@@ -170,11 +173,8 @@ func executeQuery(
 	}
 
 	for _, c := range captures {
-		if q.CaptureNameForId(c.Index) != captureName {
-			continue
-		}
-		nodes = append(nodes, c.Node)
+		captureName := q.CaptureNameForId(c.Index)
+		nodes[captureName] = append(nodes[captureName], c.Node)
 	}
-
 	return nodes, nil
 }

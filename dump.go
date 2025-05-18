@@ -37,8 +37,8 @@ func runDump(configPath string) error {
 			return
 		}
 		matches, _ := parserPool.ParseAndQuery(data, []byte(cfg.Query))
-		links := resolver.ExtractLinks(note, matches, data)
-		_ = c.SaveNote(note.CachePath, links, now)
+		links, meta := resolver.ExtractLinksAndMeta(note, matches, data)
+		_ = c.SaveNote(note.CachePath, links, meta, now)
 	}
 	scanner.Scan(cfg.Root, skip, callback)
 	fmt.Print(string(c.Dump()))

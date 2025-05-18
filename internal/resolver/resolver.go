@@ -155,7 +155,12 @@ func ResolveReference(source Note, reference string) (Note, error) {
 	return Resolve(reference)
 }
 
-func ExtractLinks(note Note, nodes []*sitter.Node, document []byte) []cache.Link {
+func ExtractLinksAndMeta(
+	note Note,
+	namedNodes map[string][]*sitter.Node,
+	document []byte,
+) ([]cache.Link, map[string]string) {
+	nodes := namedNodes["target"]
 	// Map to group ranges by target path, preserving insertion order
 	rangesMap := make(map[string][]protocol.Range)
 	order := make([]string, 0, len(nodes))
@@ -192,5 +197,12 @@ func ExtractLinks(note Note, nodes []*sitter.Node, document []byte) []cache.Link
 		})
 	}
 
-	return links
+	meta := make(map[string]string)
+	for k, v := range namedNodes {
+		if len(v) > 0 {
+			meta[k] = v[0].Content(document)
+		}
+	}
+
+	return links, meta
 }

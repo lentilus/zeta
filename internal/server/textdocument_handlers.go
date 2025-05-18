@@ -19,11 +19,11 @@ func (s *Server) textDocumentDidOpen(
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(params.TextDocument.Text))
-	links, err := s.manager.GetLinks(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
 	if err != nil {
 		return err
 	}
-	if err := s.cache.EditNote(note.RelativePath, links); err != nil {
+	if err := s.cache.EditNote(note.RelativePath, links, meta); err != nil {
 		return err
 	}
 	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
@@ -45,11 +45,11 @@ func (s *Server) textDocumentDidChange(
 			return fmt.Errorf("unexpected error during edit: %v", err)
 		}
 	}
-	links, err := s.manager.GetLinks(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
 	if err != nil {
 		return err
 	}
-	if err := s.cache.EditNote(note.RelativePath, links); err != nil {
+	if err := s.cache.EditNote(note.RelativePath, links, meta); err != nil {
 		return err
 	}
 	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
@@ -65,11 +65,11 @@ func (s *Server) textDocumentDidSave(
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(*params.Text))
-	links, err := s.manager.GetLinks(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
 	if err != nil {
 		return err
 	}
-	if err := s.cache.SaveNote(note.RelativePath, links, time.Now()); err != nil {
+	if err := s.cache.SaveNote(note.RelativePath, links, meta, time.Now()); err != nil {
 		return err
 	}
 	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))

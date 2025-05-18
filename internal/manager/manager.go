@@ -88,37 +88,37 @@ func (dm *DocumentManager) ApplyIncrementalEdit(
 }
 
 // GetLinks runs the full parse → query → extract pipeline.
-func (dm *DocumentManager) GetLinks(
+func (dm *DocumentManager) GetLinksAndMeta(
 	uri string,
 	queryString string,
-) ([]cache.Link, error) {
+) ([]cache.Link, map[string]string, error) {
 	// Ensure parser + doc
 	p, err := dm.EnsureParser(uri)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	doc, err := dm.GetDocument(uri)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Parse & query
 	if err := p.Parse(doc); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	nodes, err := p.Query([]byte(queryString), doc)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Resolve note metadata
 	note, err := resolver.Resolve(uri)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
+	links, meta := resolver.ExtractLinksAndMeta(note, nodes, doc)
 	// Extract and return links
-	return resolver.ExtractLinks(note, nodes, doc), nil
+	return links, meta, nil
 }
 
 // Release frees parser and document for a URI.

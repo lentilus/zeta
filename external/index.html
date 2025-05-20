@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <title>Zeta Graph</title>
     <style>
-      body { margin: 0; }
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+      }
       #graph { width: 100vw; height: 100vh; }
     </style>
     <script src="_vendor/d3.v5.min.js"></script>
@@ -17,6 +21,11 @@
       const graphData = { nodes: [], links: [] };
       const container = document.getElementById('graph');
 
+      // helper to get current text color
+      function currentColor() {
+        return getComputedStyle(document.body).color;
+      }
+
       // Initialize ForceGraph with full container size
       const Graph = ForceGraph()(container)
         .width(container.clientWidth)
@@ -27,26 +36,45 @@
         .d3Force('y', d3.forceY(0).strength(0.07))
         .graphData(graphData)
         .nodeCanvasObject((node, ctx, globalScale) => {
-          const r = 5;
-          ctx.save();
-          if (node.grayed) ctx.globalAlpha = 0.2;
+          const r    = 5;
+          const fg   = getComputedStyle(document.body).color;
+          const bg   = getComputedStyle(document.body).backgroundColor;
+          const label = node.label;
+          const fontSize = 12 / globalScale;
+
+          // Draw node circle
           ctx.beginPath();
           ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-          ctx.fillStyle = '#999';
+          ctx.fillStyle = node.grayed ? 'GrayText' : fg;
           ctx.fill();
-          ctx.restore();
 
-          if (globalScale > 0.8 && node.label) {
-            ctx.save();
-            if (node.grayed) ctx.globalAlpha = 0.2;
-            ctx.font = `${12 / globalScale}px Sans-Serif`;
+          // Draw label with halo
+          if (globalScale > 0.8 && label) {
+            ctx.font = `${fontSize}px Sans-Serif`;
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#fff';
-            ctx.fillText(node.label, node.x, node.y + r + 2);
-            ctx.restore();
+            ctx.textBaseline = 'top';
+
+            // measure label
+            const metrics = ctx.measureText(label);
+            const textW   = metrics.width;
+            const textH   = fontSize;
+            const pad     = 2; // px around text
+
+            // background box
+            ctx.fillStyle = bg;
+            ctx.fillRect(
+              node.x - textW/2 - pad,
+              node.y + r + 2 - pad/2,
+              textW + pad*2,
+              textH + pad
+            );
+
+            // draw text
+            ctx.fillStyle   = node.grayed ? 'GrayText' : fg;
+            ctx.fillText(label, node.x, node.y + r + 2);
           }
         })
-        .linkColor(() => '#ccc')
+        .linkColor(() => currentColor())
         .onNodeClick(node => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ op:'nodeClick', node:{ id: node.id }}));
@@ -55,15 +83,14 @@
 
       // Handle window resize: update graph dimensions
       function resizeGraph() {
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        Graph.width(width).height(height);
+        Graph.width(container.clientWidth)
+             .height(container.clientHeight);
       }
 
       window.addEventListener('resize', resizeGraph);
-      // Initial resize to set proper size on load
       resizeGraph();
 
+      // When new data arrives, re-heat the simulation so that colors are re-read
       function reheatAndUpdate() {
         Graph.d3Alpha(0.6).graphData(graphData);
       }
@@ -80,7 +107,7 @@
           case 'add':
             if (msg.node) graphData.nodes.push(msg.node);
             if (msg.link) graphData.links.push(msg.link);
-            Graph.graphData(graphData);
+            reheatAndUpdate();
             break;
           case 'update':
             if (msg.node) {
@@ -92,24 +119,24 @@
           case 'deleteNode':
             if (msg.node) {
               const id = msg.node.id;
-              graphData.nodes = graphData.nodes.filter(n=>n.id!==id);
-              graphData.links = graphData.links.filter(l=> {
-                const ls = typeof l.source==='object'?l.source.id:l.source;
-                const lt = typeof l.target==='object'?l.target.id:l.target;
-                return ls!==id && lt!==id;
+              graphData.nodes = graphData.nodes.filter(n => n.id !== id);
+              graphData.links = graphData.links.filter(l => {
+                const ls = typeof l.source === 'object' ? l.source.id : l.source;
+                const lt = typeof l.target === 'object' ? l.target.id : l.target;
+                return ls !== id && lt !== id;
               });
-              Graph.graphData(graphData);
+              reheatAndUpdate();
             }
             break;
           case 'deleteLink':
             if (msg.link) {
-              const { source:s, target:t } = msg.link;
-              graphData.links = graphData.links.filter(l=> {
-                const ls = typeof l.source==='object'?l.source.id:l.source;
-                const lt = typeof l.target==='object'?l.target.id:l.target;
-                return !(ls===s && lt===t);
+              const { source: s, target: t } = msg.link;
+              graphData.links = graphData.links.filter(l => {
+                const ls = typeof l.source === 'object' ? l.source.id : l.source;
+                const lt = typeof l.target === 'object' ? l.target.id : l.target;
+                return !(ls === s && lt === t);
               });
-              Graph.graphData(graphData);
+              reheatAndUpdate();
             }
             break;
         }

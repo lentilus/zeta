@@ -92,7 +92,7 @@
 
       // When new data arrives, re-heat the simulation so that colors are re-read
       function reheatAndUpdate() {
-        Graph.d3Alpha(0.6).graphData(graphData);
+        Graph.graphData(graphData);
       }
 
       const ws = new WebSocket(`ws://${location.host}/ws`);
@@ -113,7 +113,7 @@
             if (msg.node) {
               const n = graphData.nodes.find(n => n.id === msg.node.id);
               if (n) Object.assign(n, msg.node);
-              Graph.refresh();
+              // Graph.refresh();
             }
             break;
           case 'deleteNode':

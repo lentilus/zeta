@@ -44,11 +44,11 @@ func (s *Server) graph(ctx *glsp.Context) error {
 		return err
 	}
 
-	go ProcessEvents(updates)
+	go ProcessEvents(s, updates)
 	return nil
 }
 
-func ProcessEvents(events <-chan cache.Event) {
+func ProcessEvents(s *Server, events <-chan cache.Event) {
 	idCounter := 0
 	index := map[cache.Path]int{}
 	pathToId := func(path cache.Path) int {
@@ -61,8 +61,14 @@ func ProcessEvents(events <-chan cache.Event) {
 	}
 
 	noteToNode := func(note cache.NoteEvent) graph.Node {
+		var name string
+		if title, err := s.cache.GetMetaData(note.Path, "title"); err != nil {
+			name = note.Path
+		} else {
+			name = title
+		}
 		node := graph.Node{
-			Label:  note.Path,
+			Label:  name,
 			Grayed: note.Placeholder,
 			ID:     pathToId(note.Path),
 		}

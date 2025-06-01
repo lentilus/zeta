@@ -15,10 +15,6 @@
         url = "https://cdn.jsdelivr.net/npm/force-graph@1.49.5/dist/force-graph.min.js";
         sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
       };
-      d3 = prev.fetchurl {
-        url = "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js";
-        sha256 = "sha256-8glLv2FBs1lyLE/kVOtsSw8OQswQzHr5IfwVj864ZTk=";
-      };
       tree-sitter-typst = prev.fetchFromGitHub {
         owner = "uben0";
         repo = "tree-sitter-typst";
@@ -68,7 +64,6 @@
           rm -rf .gitignore
           cp -r ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
           cp -r ${pkgs.force-graph}   external/_vendor/force-graph.js
-          cp    ${pkgs.d3}           external/_vendor/d3.v5.min.js
         '';
       };
 
@@ -101,7 +96,6 @@ devShells = forAllSystems ({ pkgs, system }: let
         mkdir -p external/_vendor
         cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
         cp -r --no-preserve=mode,ownership ${pkgs.force-graph} external/_vendor/force-graph.js
-        cp --no-preserve=mode,ownership ${pkgs.d3} external/_vendor/d3.v5.min.js
         echo "_vendor directory is now up to date."
       '';
     in {

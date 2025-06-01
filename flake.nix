@@ -37,7 +37,7 @@
     packages = forAllSystems ({ pkgs, system }: rec {
       zeta = pkgs.buildGoModule rec {
         pname   = "zeta";
-        version = "0.3.0";
+        version = "0.3.4";
         src     = ./.;
 
         buildInputs = [

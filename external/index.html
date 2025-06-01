@@ -20,54 +20,50 @@
       const graphData = { nodes: [], links: [] };
       const container = document.getElementById('graph');
 
-      // helper to get current text color
       function currentColor() {
         return getComputedStyle(document.body).color;
       }
 
-      // Initialize ForceGraph with full container size
+      // Initialize ForceGraph with text nodes
       const Graph = ForceGraph()(container)
         .width(container.clientWidth)
         .height(container.clientHeight)
         .nodeId('id')
         .graphData(graphData)
         .nodeCanvasObject((node, ctx, globalScale) => {
-          const r    = 5;
-          const fg   = getComputedStyle(document.body).color;
-          const bg   = getComputedStyle(document.body).backgroundColor;
-          const label = node.label;
+          const label = node.label || node.id;
+          if (!label) return;
+
           const fontSize = 12 / globalScale;
+          ctx.font = `${fontSize}px Sans-Serif`;
+          const textWidth = ctx.measureText(label).width;
+          const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4); // Padding
 
-          // Draw node circle
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-          ctx.fillStyle = node.grayed ? 'GrayText' : fg;
-          ctx.fill();
+          // Draw background rectangle
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fillRect(
+            node.x - bckgDimensions[0] / 2,
+            node.y - bckgDimensions[1] / 2,
+            ...bckgDimensions
+          );
 
-          // Draw label with halo
-          if (globalScale > 0.8 && label) {
-            ctx.font = `${fontSize}px Sans-Serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
+          // Draw text
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = node.grayed ? 'GrayText' : currentColor();
+          ctx.fillText(label, node.x, node.y);
 
-            // measure label
-            const metrics = ctx.measureText(label);
-            const textW   = metrics.width;
-            const textH   = fontSize;
-            const pad     = 2; // px around text
-
-            // background box
-            ctx.fillStyle = bg;
+          node.__bckgDimensions = bckgDimensions; // Store for pointer area
+        })
+        .nodePointerAreaPaint((node, color, ctx) => {
+          ctx.fillStyle = color;
+          const bckgDimensions = node.__bckgDimensions;
+          if (bckgDimensions) {
             ctx.fillRect(
-              node.x - textW/2 - pad,
-              node.y + r + 2 - pad/2,
-              textW + pad*2,
-              textH + pad
+              node.x - bckgDimensions[0] / 2,
+              node.y - bckgDimensions[1] / 2,
+              ...bckgDimensions
             );
-
-            // draw text
-            ctx.fillStyle   = node.grayed ? 'GrayText' : fg;
-            ctx.fillText(label, node.x, node.y + r + 2);
           }
         })
         .linkColor(() => currentColor())
@@ -77,7 +73,6 @@
           }
         });
 
-      // Handle window resize: update graph dimensions
       function resizeGraph() {
         Graph.width(container.clientWidth)
              .height(container.clientHeight);
@@ -86,7 +81,6 @@
       window.addEventListener('resize', resizeGraph);
       resizeGraph();
 
-      // When new data arrives, re-heat the simulation so that colors are re-read
       function reheatAndUpdate() {
         Graph.graphData(graphData);
       }
@@ -109,7 +103,6 @@
             if (msg.node) {
               const n = graphData.nodes.find(n => n.id === msg.node.id);
               if (n) Object.assign(n, msg.node);
-              // Graph.refresh();
             }
             break;
           case 'deleteNode':

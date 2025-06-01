@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -46,7 +47,11 @@ func (s *Server) initialize(
 	// Cache File
 	stateBaseDir, _ := getXDGStateHome("zeta")
 	hash := sha256.New()
-	hash.Write([]byte("FIXME!!!"))
+	b, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	hash.Write([]byte(b))
 	configHash := hex.EncodeToString(hash.Sum(nil))
 	cacheDir := path.Join(stateBaseDir, url.PathEscape(rootUri.Path), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {

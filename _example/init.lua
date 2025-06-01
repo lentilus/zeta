@@ -1,9 +1,11 @@
 local init_options = {
-  -- `query` defines the treesitter query used to find links. Be creative!
-  -- NOTE: the target capture must be named `target`!
+  -- `query` defines the treesitter query used to find links and other metadata.
+  -- You can put anything here - be creative!
+  -- NOTE: The capture that specifies a link must be named `target`!
+  -- Use the `title` capture if the filename is not semantic
   query = [[
-  (code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))
-  (heading (text) @ title)
+    (code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))
+    (heading (text) @title) 
   ]],
   
   -- `select_regex` selects a substring of the `target` capture as the reference.

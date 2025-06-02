@@ -24,7 +24,6 @@
         return getComputedStyle(document.body).color;
       }
 
-      // Initialize ForceGraph with text nodes
       const Graph = ForceGraph()(container)
         .width(container.clientWidth)
         .height(container.clientHeight)
@@ -34,42 +33,63 @@
           const label = node.label || node.id;
           if (!label) return;
 
-          const fontSize = 12 / globalScale;
-          ctx.font = `${fontSize}px Sans-Serif`;
-          const textWidth = ctx.measureText(label).width;
-          const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4); // Padding
+          const BASE_FONT_PX = 12;
+          const MIN_FONT_PX  = 1;
+          const MAX_FONT_PX  = 10;
 
-          // Draw background rectangle
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          let fontSize = BASE_FONT_PX / globalScale;
+          fontSize = Math.max(MIN_FONT_PX, Math.min(MAX_FONT_PX, fontSize));
+          ctx.font = `${fontSize}px Sans-Serif`;
+
+          const FADE_START = 0.5;
+          const FADE_END   = 0.25;
+
+          let opacity = 1;
+          if (globalScale < FADE_START) {
+            opacity = (globalScale - FADE_END) / (FADE_START - FADE_END);
+            opacity = Math.max(0, Math.min(1, opacity));
+          }
+          if (opacity <= 0) return;
+          ctx.globalAlpha = opacity;
+
+          const textWidth = ctx.measureText(label).width;
+          const PADDING   = fontSize * 0.4;
+          const bckgW     = textWidth + PADDING * 2;
+          const bckgH     = fontSize + PADDING * 2;
+
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * opacity})`;
           ctx.fillRect(
-            node.x - bckgDimensions[0] / 2,
-            node.y - bckgDimensions[1] / 2,
-            ...bckgDimensions
+            node.x - bckgW / 2,
+            node.y - bckgH / 2,
+            bckgW,
+            bckgH
           );
 
-          // Draw text
-          ctx.textAlign = 'center';
+          ctx.textAlign    = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillStyle = node.grayed ? 'GrayText' : currentColor();
+          ctx.fillStyle    = node.grayed ? 'GrayText' : currentColor();
           ctx.fillText(label, node.x, node.y);
 
-          node.__bckgDimensions = bckgDimensions; // Store for pointer area
+          node.__bckgDimensions = [bckgW, bckgH];
+
+          ctx.globalAlpha = 1;
         })
         .nodePointerAreaPaint((node, color, ctx) => {
+          // same hit‐area logic as before
+          const dims = node.__bckgDimensions;
+          if (!dims) return;
           ctx.fillStyle = color;
-          const bckgDimensions = node.__bckgDimensions;
-          if (bckgDimensions) {
-            ctx.fillRect(
-              node.x - bckgDimensions[0] / 2,
-              node.y - bckgDimensions[1] / 2,
-              ...bckgDimensions
-            );
-          }
+          ctx.fillRect(
+            node.x - dims[0] / 2,
+            node.y - dims[1] / 2,
+            dims[0],
+            dims[1]
+          );
         })
         .linkColor(() => currentColor())
         .onNodeClick(node => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ op:'nodeClick', node:{ id: node.id }}));
+            ws.send(JSON.stringify({ op: 'nodeClick', node: { id: node.id } }));
           }
         });
 

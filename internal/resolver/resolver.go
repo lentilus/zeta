@@ -22,11 +22,13 @@ type Note struct {
 }
 
 var (
-	configured       bool = false
-	root             string
-	selectRegex      *regexp.Regexp
-	fileExtenstions  []string
-	defaultExtension string
+	configured         bool = false
+	root               string
+	selectRegex        *regexp.Regexp
+	fileExtenstions    []string
+	defaultExtension   string
+	titleTemplate      string
+	titleSubstitutions []string
 )
 
 func Configure(
@@ -34,6 +36,8 @@ func Configure(
 	configSelectRegex string,
 	configFileExtensions []string,
 	configDefaultExtension string,
+	configTitleTemplate string,
+	configTitleSubstitutions []string,
 ) error {
 	if configured {
 		panic("Resolver already configured.")
@@ -42,6 +46,8 @@ func Configure(
 	root = configRoot
 	fileExtenstions = configFileExtensions
 	defaultExtension = configDefaultExtension
+	titleTemplate = configTitleTemplate
+	titleSubstitutions = configTitleSubstitutions
 
 	var err error
 	selectRegex, err = regexp.Compile(configSelectRegex)
@@ -49,6 +55,25 @@ func Configure(
 		return err
 	}
 	return nil
+}
+
+func Title(path string, metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return path
+	}
+	var args []any
+
+	for _, s := range titleSubstitutions {
+		v, ok := metadata[string(s)]
+		if ok {
+			args = append(args, v)
+		} else {
+			args = append(args, "")
+		}
+	}
+
+	title := fmt.Sprintf(titleTemplate, args...)
+	return title
 }
 
 func Resolve(base any) (Note, error) {

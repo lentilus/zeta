@@ -11,10 +11,13 @@ import (
 
 type Path = string
 
+type Metadata = map[string]string
+
 // Path represents a node in the cache graph.
 type Note = struct {
 	Path        Path
 	Placeholder bool
+	Metadata    Metadata
 }
 
 // Link represents a directed edge between two notes.
@@ -47,6 +50,7 @@ type NoteEvent = struct {
 	Path        Path
 	NewPath     Path // only populated on updates
 	Placeholder bool
+	Metadata    Metadata
 }
 
 // Event describes a single change in the cache.
@@ -64,7 +68,7 @@ var (
 
 type Graph interface {
 	// UpsertNote
-	UpsertNote(note Path, forwardLinks []Link) error
+	UpsertNote(note Path, forwardLinks []Link, metadata Metadata) error
 
 	// DeleteNote deletes a note or marks is missing if it has backlinks.
 	DeleteNote(path Path) error

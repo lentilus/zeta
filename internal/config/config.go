@@ -7,19 +7,23 @@ import (
 )
 
 type Config struct {
-	Query            string   `json:"query"`
-	SelectRegex      string   `json:"select_regex"`
-	Root             string   `json:"root"` // only for dump!
-	FileExtensions   []string `json:"file_extensions"`
-	DefaultExtension string   `json:"default_extension"`
+	Query              string   `json:"query"`
+	SelectRegex        string   `json:"select_regex"`
+	Root               string   `json:"root"` // only for dump!
+	FileExtensions     []string `json:"file_extensions"`
+	DefaultExtension   string   `json:"default_extension"`
+	TitleTemplate      string   `json:"title_template"`
+	TitleSubstitutions []string `json:"title_substitutions"`
 }
 
 var defaultConfig = Config{
-	Query:            `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
-	SelectRegex:      `^"(.*)"$`,
-	Root:             ".",
-	FileExtensions:   []string{".typ"},
-	DefaultExtension: ".typ",
+	Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
+	SelectRegex:        `^"(.*)"$`,
+	Root:               ".",
+	FileExtensions:     []string{".typ"},
+	DefaultExtension:   ".typ",
+	TitleTemplate:      "%s %s %s",
+	TitleSubstitutions: []string{"taxon", "title", "path"},
 }
 
 func Load(v any) (Config, error) {

@@ -5,6 +5,7 @@ import (
 	"log"
 	"zeta/internal/cache"
 	"zeta/internal/graph"
+	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -60,13 +61,9 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 		return idCounter
 	}
 
+	// noteToNode now uses note.Metadata directly, rather than fetching from cache
 	noteToNode := func(note cache.NoteEvent) graph.Node {
-		var name string
-		if title, err := s.cache.GetMetaData(note.Path, "title"); err != nil {
-			name = note.Path
-		} else {
-			name = title
-		}
+		name := resolver.Title(note.Path, note.Metadata)
 		node := graph.Node{
 			Label:  name,
 			Grayed: note.Placeholder,
@@ -75,7 +72,7 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 		return node
 	}
 
-	LinkToLink := func(link cache.LinkEvent) graph.Link {
+	linkToLink := func(link cache.LinkEvent) graph.Link {
 		return graph.Link{
 			Source: pathToId(link.Source),
 			Target: pathToId(link.Target),
@@ -88,27 +85,39 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 			if err := graph.AddNode(noteToNode(*ev.Note)); err != nil {
 				log.Printf("graph.AddNode error: %v (event %+v)", err, ev)
 			}
+
 		case cache.UpdateNote:
+			// Preserve the existing node ID, but update its label from the new Metadata
 			id, _ := index[ev.Note.Path]
 			delete(index, ev.Note.Path)
 			ev.Note.Path = ev.Note.NewPath
 			index[ev.Note.NewPath] = id
 
-			if err := graph.UpdateNode(noteToNode(*ev.Note)); err != nil {
+			// Use note.Metadata provided by the UpdateNote event
+			updatedNode := graph.Node{
+				Label:  resolver.Title(ev.Note.Path, ev.Note.Metadata),
+				Grayed: ev.Note.Placeholder,
+				ID:     id,
+			}
+			if err := graph.UpdateNode(updatedNode); err != nil {
 				log.Printf("graph.UpdateNode error: %v (event %+v)", err, ev)
 			}
+
 		case cache.DeleteNote:
 			if err := graph.DeleteNode(pathToId(ev.Note.Path)); err != nil {
 				log.Printf("graph.DeleteNode error: %v (event %+v)", err, ev)
 			}
+
 		case cache.CreateLink:
-			if err := graph.AddLink(LinkToLink(*ev.Link)); err != nil {
+			if err := graph.AddLink(linkToLink(*ev.Link)); err != nil {
 				log.Printf("graph.AddLink error: %v (event %+v)", err, ev)
 			}
+
 		case cache.DeleteLink:
-			if err := graph.DeleteLink(LinkToLink(*ev.Link)); err != nil {
-				log.Printf("graph.DelteLink error: %v (event %+v)", err, ev)
+			if err := graph.DeleteLink(linkToLink(*ev.Link)); err != nil {
+				log.Printf("graph.DeleteLink error: %v (event %+v)", err, ev)
 			}
+
 		default:
 			log.Printf("unknown Operation %q in event %+v", ev.Type, ev)
 		}

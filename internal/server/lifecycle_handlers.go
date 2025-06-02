@@ -42,6 +42,8 @@ func (s *Server) initialize(
 		config.SelectRegex,
 		config.FileExtensions,
 		config.DefaultExtension,
+		config.TitleTemplate,
+		config.TitleSubstitutions,
 	)
 
 	// Cache File

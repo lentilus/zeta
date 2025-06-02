@@ -26,20 +26,46 @@ func NewGraph() Graph {
 	}
 }
 
-// UpsertNote inserts or updates a note, diffing links and emitting events only on topology changes.
-func (g *graph) UpsertNote(path Path, links []Link) error {
+// UpsertNote inserts or updates a note, diffing links and emitting events only on topology or metadata changes.
+func (g *graph) UpsertNote(path Path, links []Link, metadata Metadata) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// Ensure note exists (override placeholder)
 	note, exists := g.notes[path]
 	if !exists {
-		note = &Note{Path: path, Placeholder: false}
+		note = &Note{Path: path, Placeholder: false, Metadata: metadata}
 		g.notes[path] = note
-		g.emit(Event{Type: CreateNote, Note: &NoteEvent{Path: path, Placeholder: false}})
+		g.emit(
+			Event{
+				Type: CreateNote,
+				Note: &NoteEvent{Path: path, Placeholder: false, Metadata: metadata},
+			},
+		)
 	} else if note.Placeholder {
 		note.Placeholder = false
-		g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, NewPath: path, Placeholder: false}})
+		g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, NewPath: path, Placeholder: false, Metadata: metadata}})
+	} else {
+		needsUpdate := false
+		m := note.Metadata
+		for k, v := range m {
+			nv, _ := metadata[k]
+			if nv != v {
+				needsUpdate = true
+				break
+			}
+		}
+		m = metadata
+		for k, v := range m {
+			nv, _ := note.Metadata[k]
+			if nv != v {
+				needsUpdate = true
+				break
+			}
+		}
+		if needsUpdate {
+			g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, NewPath: path, Placeholder: false, Metadata: metadata}})
+		}
 	}
 
 	// Build maps of old and new links
@@ -162,7 +188,10 @@ func renameOptimized(path Path, add []Link, remove []Path, g *graph) bool {
 			g.backlinks[nT][path] = add[0]
 
 			g.emit(
-				Event{Type: UpdateNote, Note: &NoteEvent{Path: oT, NewPath: nT, Placeholder: true}},
+				Event{
+					Type: UpdateNote,
+					Note: &NoteEvent{Path: oT, NewPath: nT, Placeholder: true},
+				},
 			)
 			return true
 		}
@@ -258,7 +287,10 @@ func (g *graph) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 	notes := make([]*NoteEvent, 0, len(g.notes))
 	for _, note := range g.notes {
-		notes = append(notes, &NoteEvent{Path: note.Path, Placeholder: note.Placeholder})
+		notes = append(
+			notes,
+			&NoteEvent{Path: note.Path, Placeholder: note.Placeholder, Metadata: note.Metadata},
+		)
 	}
 	links := make([]*LinkEvent, 0)
 	for src, targets := range g.forward {

@@ -9,8 +9,8 @@ import (
 )
 
 type Cache interface {
-	SaveNote(path Path, forwardLinks []Link, metaData map[string]string, saveTime time.Time) error
-	EditNote(path Path, forwardLinks []Link, metaData map[string]string) error
+	SaveNote(path Path, forwardLinks []Link, metaData Metadata, saveTime time.Time) error
+	EditNote(path Path, forwardLinks []Link, metaData Metadata) error
 	DiscardNote(path Path) error
 	DeleteNote(path Path) error
 	GetPaths() []Path
@@ -18,18 +18,18 @@ type Cache interface {
 	NoteExists(path Path) bool
 	GetForwardLinks(path Path) ([]Link, error)
 	GetBackLinks(path Path) ([]Link, error)
-	GetMetaData(path Path, key string) (string, error)
+	GetMetaData(path Path) (Metadata, error)
 	Subscribe(ctx context.Context) (<-chan Event, error)
 	Dump() []byte
 }
 
 type cache struct {
 	mu              sync.RWMutex
-	graph           Graph                      `json:"-"`
-	SavedNotes      map[Path][]Link            `json:"saved_notes"`
-	SaveTimes       map[Path]time.Time         `json:"save_times"`
-	SavedMetaData   map[Path]map[string]string `json:"metadata"`
-	CurrentMetaData map[Path]map[string]string `json:"-"`
+	graph           Graph              `json:"-"`
+	SavedNotes      map[Path][]Link    `json:"saved_notes"`
+	SaveTimes       map[Path]time.Time `json:"save_times"`
+	SavedMetaData   map[Path]Metadata  `json:"metadata"`
+	CurrentMetaData map[Path]Metadata  `json:"-"`
 }
 
 func NewCache() Cache {
@@ -37,8 +37,8 @@ func NewCache() Cache {
 		graph:           NewGraph(),
 		SavedNotes:      make(map[Path][]Link),
 		SaveTimes:       make(map[Path]time.Time),
-		SavedMetaData:   make(map[Path]map[string]string),
-		CurrentMetaData: make(map[Path]map[string]string),
+		SavedMetaData:   make(map[Path]Metadata),
+		CurrentMetaData: make(map[Path]Metadata),
 	}
 }
 
@@ -57,12 +57,12 @@ func RestoreCache(dump []byte) (Cache, error) {
 		c.SaveTimes = make(map[Path]time.Time)
 	}
 	if c.SavedMetaData == nil {
-		c.SavedMetaData = make(map[Path]map[string]string)
+		c.SavedMetaData = make(map[Path]Metadata)
 	}
 	// initialize current metadata from saved metadata
-	c.CurrentMetaData = make(map[Path]map[string]string, len(c.SavedMetaData))
+	c.CurrentMetaData = make(map[Path]Metadata, len(c.SavedMetaData))
 	for path, m := range c.SavedMetaData {
-		mCopy := make(map[string]string, len(m))
+		mCopy := make(Metadata, len(m))
 		for k, v := range m {
 			mCopy[k] = v
 		}
@@ -75,7 +75,7 @@ func RestoreCache(dump []byte) (Cache, error) {
 		if !ok {
 			return nil, errors.New("missing save-time for " + string(path))
 		}
-		if err := c.graph.UpsertNote(path, links); err != nil {
+		if err := c.graph.UpsertNote(path, links, c.SavedMetaData[path]); err != nil {
 			return nil, err
 		}
 	}
@@ -87,13 +87,13 @@ func RestoreCache(dump []byte) (Cache, error) {
 func (c *cache) SaveNote(
 	path Path,
 	forwardLinks []Link,
-	metaData map[string]string,
+	metaData Metadata,
 	saveTime time.Time,
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.graph.UpsertNote(path, forwardLinks); err != nil {
+	if err := c.graph.UpsertNote(path, forwardLinks, metaData); err != nil {
 		return err
 	}
 	// commit links and time
@@ -113,7 +113,7 @@ func (c *cache) SaveNote(
 func (c *cache) EditNote(path Path, forwardLinks []Link, metaData map[string]string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.graph.UpsertNote(path, forwardLinks); err != nil {
+	if err := c.graph.UpsertNote(path, forwardLinks, metaData); err != nil {
 		return err
 	}
 	// update saved-links view
@@ -147,11 +147,8 @@ func (c *cache) DiscardNote(path Path) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	var savedM Metadata
 	if links, ok := c.SavedNotes[path]; ok {
-		// restore forward links
-		if err := c.graph.UpsertNote(path, links); err != nil {
-			return err
-		}
 		// restore metadata staging
 		if savedM, ok2 := c.SavedMetaData[path]; ok2 {
 			mCopy := make(map[string]string, len(savedM))
@@ -161,6 +158,11 @@ func (c *cache) DiscardNote(path Path) error {
 			c.CurrentMetaData[path] = mCopy
 		} else {
 			delete(c.CurrentMetaData, path)
+		}
+
+		// restore forward links
+		if err := c.graph.UpsertNote(path, links, savedM); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -208,19 +210,15 @@ func (c *cache) GetBackLinks(path Path) ([]Link, error) {
 }
 
 // GetMetaData returns the staging metadata map for a given note, or an error if not found.
-func (c *cache) GetMetaData(path Path, key string) (string, error) {
+func (c *cache) GetMetaData(path Path) (Metadata, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	m, ok := c.CurrentMetaData[path]
 	if !ok {
-		return "", errors.New("no metadata for " + string(path))
+		return nil, errors.New("no metadata for " + string(path))
 	}
-	v, ok := m[key]
-	if !ok {
-		return "", errors.New("key not present in metadata")
-	}
-	return v, nil
+	return m, nil
 }
 
 func (c *cache) Subscribe(ctx context.Context) (<-chan Event, error) {

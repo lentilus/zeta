@@ -112,10 +112,12 @@ func (s *Server) linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 			severity = warn
 		}
 		for _, r := range l.Ranges {
+			t := string(l.Target)
+			m, _ := s.cache.GetMetaData(t)
 			d := protocol.Diagnostic{
 				Range:    r,
 				Severity: &severity,
-				Message:  "> " + string(l.Target),
+				Message:  "> " + resolver.Title(t, m),
 			}
 			diagnostics = append(diagnostics, d)
 		}

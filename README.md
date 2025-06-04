@@ -2,11 +2,9 @@
 
 A typst language-server for __zettelkasten__-style note-taking with reference tracking and navigation.
 
-<p style="display: flex; justify-content: space-between; margin: 0;">
-  <img src="./_example/note.png" width="32%" />
-  <img src="./_example/workspace-symbols.png" width="32%" />
-  <img src="./_example/graph.png" width="32%" />
-</p>
+https://github.com/user-attachments/assets/5675828b-a6b3-4aff-bf63-b7ecc3d7123d
+
+
 
 ## Language Server Features
 1. **Go to Definition** navigates directly to referenced notes.

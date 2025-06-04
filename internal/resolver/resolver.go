@@ -73,6 +73,7 @@ func Title(path string, metadata map[string]string) string {
 	}
 
 	title := fmt.Sprintf(titleTemplate, args...)
+	title = strings.TrimSpace(title)
 	return title
 }
 

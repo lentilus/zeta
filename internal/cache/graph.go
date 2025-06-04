@@ -35,7 +35,6 @@ func (g *graph) UpsertNote(path Path, links []Link, metadata Metadata) error {
 	note, exists := g.notes[path]
 	if !exists {
 		note = &Note{Path: path, Placeholder: false, Metadata: metadata}
-		g.notes[path] = note
 		g.emit(
 			Event{
 				Type: CreateNote,
@@ -67,6 +66,9 @@ func (g *graph) UpsertNote(path Path, links []Link, metadata Metadata) error {
 			g.emit(Event{Type: UpdateNote, Note: &NoteEvent{Path: path, NewPath: path, Placeholder: false, Metadata: metadata}})
 		}
 	}
+
+	note.Metadata = metadata
+	g.notes[path] = note
 
 	// Build maps of old and new links
 	oldLinks := g.forward[path]
@@ -287,10 +289,8 @@ func (g *graph) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 	notes := make([]*NoteEvent, 0, len(g.notes))
 	for _, note := range g.notes {
-		notes = append(
-			notes,
-			&NoteEvent{Path: note.Path, Placeholder: note.Placeholder, Metadata: note.Metadata},
-		)
+		ev := &NoteEvent{Path: note.Path, Placeholder: note.Placeholder, Metadata: note.Metadata}
+		notes = append(notes, ev)
 	}
 	links := make([]*LinkEvent, 0)
 	for src, targets := range g.forward {

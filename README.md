@@ -1,5 +1,10 @@
 # zeta $\zeta$
 
+![GitHub Tag](https://img.shields.io/github/v/tag/lentilus/zeta?label=version)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/lentilus/zeta/release.yaml)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/lentilus/zeta/total)
+
+
 A typst language-server for __zettelkasten__-style note-taking with reference tracking and navigation.
 
 <p style="display: flex; justify-content: space-between; margin: 0;">

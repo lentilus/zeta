@@ -4,14 +4,14 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/lentilus/zeta/release.yaml)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/lentilus/zeta/total)
 
-
 A typst language-server for __zettelkasten__-style note-taking with reference tracking and navigation.
 
 <p style="display: flex; justify-content: space-between; margin: 0;">
-  <img src="./_example/note.png" width="32%" />
-  <img src="./_example/workspace-symbols.png" width="32%" />
+  <img src="https://github.com/user-attachments/assets/728379af-0e0d-49b4-82cf-aa19fb65cbe0" width="32%" />
+  <img src="https://github.com/user-attachments/assets/1c5e9ef4-48d1-45e1-bed5-ef119c1465c9" width="32%" />
   <img src="./_example/zeta-demo14.gif" width="32%" />
 </p>
+
 
 ## Language Server Features
 1. **Go to Definition** navigates directly to referenced notes.

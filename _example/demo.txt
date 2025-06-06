@@ -1,0 +1,47 @@
+iWelcome to Zeta! Feel free to pause the video at any momement.
+
+Zeta is a language server that I created to navigate my mathematical notes more effectively.a
+
+The language server detects *metadata* and *links* to other notes via configurable `treesitter-queries`.a
+
+Let's look at an example!`.a
+
+:e c5a546.typ
+i= Every Vectorspace has a Basis <Theorem>
+
+Using the #link("d654bf")[axiom of choice]
+we can prove that every #link("0afb11")[vectorspace] $V$
+has a basis $cal(B)$.a
+
+We can now use `goto-definition` to navigate to our linked notes.
+It does not matter that they do not yet exist.a
+
+:3020l:lua vim.lsp.buf.definition()
+i= Axiom of Choice <Axiom>
+
+The _axiom of choice_ is an axiom in #link("f3857a")[ZFC] that asserts the existence of a choice function with the ability to pick an element from any non-empty #link("0a634a")[set].a
+
+We can now use `goto-reference` to retrieve all backlinks.a
+
+:lua vim.lsp.buf.references()
+:cfirst
+:cclose
+Ga
+Notice how the warning disappeared and the hint now shows the correct note title.a
+
+Zeta allows to search through notes efficiently via workspace-symbol-queries.
+Tip: This pairs very nicely with Telescope's `Telescope lsp_workspace_symbols` command!
+
+:lua vim.lsp.buf.workspace_symbol()
+
+
+
+:cclose
+Go
+Finally there is the graph view. It is accessed via a `worskpace command`.
+The graph updates in real-time as you type.a
+:ZetaGraph
+o#link("")[]3hiI am typing this reference as we are viewing the graph
+oI will now show you what the graph may look like when you have more notes.
+
+

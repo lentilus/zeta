@@ -98,6 +98,18 @@ devShells = forAllSystems ({ pkgs, system }: let
         cp -r --no-preserve=mode,ownership ${pkgs.force-graph} external/_vendor/force-graph.js
         echo "_vendor directory is now up to date."
       '';
+
+      demo = pkgs.writeShellScriptBin "demo" ''
+        rm -rf /tmp/zeta-demo-notes
+        mkdir -p /tmp/zeta-demo-notes
+        cd /tmp/zeta-demo-notes
+
+        pv -qL 20 ${./_example/demo.txt} \
+          | script -q -c \
+          "stty rows $(tput lines) cols $(tput cols); \
+          nvim -u ${./_example/demo.lua}" \
+          /dev/null
+      '';
     in {
       default = pkgs.mkShell {
         shellHook = ''
@@ -111,9 +123,11 @@ devShells = forAllSystems ({ pkgs, system }: let
           pkgs.golines
           pkgs.typst
           pkgs.tinymist
+          pkgs.pv
           debugCmd
           debugReleaseCmd
           vendorCmd
+          demo
         ];
       };
     });

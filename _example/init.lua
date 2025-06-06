@@ -1,16 +1,28 @@
-local init_options = {
-  -- `query` defines the treesitter query used to find links and other metadata.
-  -- You can put anything here - be creative!
-  -- NOTE: The capture that specifies a link must be named `target`!
-  -- Use the `title` capture if the filename is not semantic
+defaults = {
+  -- A treesitter query that is used to extract the necessary
+  -- information from notes. The @target capture is mandatory.
+  -- It is piped through the select_regex to extract a references target.
   query = [[
     (code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))
     (heading (text) @title) 
+    (heading (label) @taxon) 
   ]],
-  
-  -- `select_regex` selects a substring of the `target` capture as the reference.
+
+  -- These are the names of the captures that are used to generate a notes title
+  -- The captured values are plugged into the title template in the order they appear.
+  title_substitutions = {"taxon", "title"},
+  title_template = "%s %s",
+
+  -- The regex used to select a substring from the tree-sitter @target capture.
+  -- If the regex yields multiple captures, the first is used.
   select_regex = '^"(.*)"$',
+
+  -- The default extension to use if a target does not have one.
   default_extension = ".typ",
+
+  -- The file extension's of files that zeta should look at.
+  -- This is especially important for zeta to be able to detect notes not opened in
+  -- the editor
   file_extensions = {".typ"},
 }
 
@@ -39,19 +51,15 @@ local on_attach = function(client, bufnr)
   end, { desc = "Execute Zeta LSP 'graph' command" })
 end
 
-
-vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
-  pattern = "*.typ",
-  callback = function()
-    vim.lsp.start({
-      name = "zeta",
-      cmd  = { "zeta", "--logfile=/tmp/zeta.log"},
-      filetypes = { "typst" },
-      root_dir  = "/tmp/zeta-test-notes",
-      capabilities = vim.lsp.protocol.make_client_capabilities(),
-      single_file_support = true,
-      init_options = init_options,
-      on_attach = on_attach,
-    })
+vim.lsp.config['zeta'] = {
+  cmd = { 'zeta', '--logfile=/tmp/zeta.log' },
+  filetypes = { 'typst' },
+  init_options = defaults,
+  root_markers = { 'test.typ' },
+  on_attach = function()
+      print("Zeta attached!")
   end,
-})
+
+}
+
+vim.lsp.enable('zeta')

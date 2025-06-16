@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
@@ -82,7 +83,7 @@ func (s *Server) workspaceSymbol(
 	context *glsp.Context,
 	params *protocol.WorkspaceSymbolParams,
 ) ([]protocol.SymbolInformation, error) {
-	max_results := 128
+	maxResults := 128
 	query := params.Query
 
 	notes := s.cache.GetPaths()
@@ -93,17 +94,17 @@ func (s *Server) workspaceSymbol(
 	for _, n := range notes {
 		meta, _ := s.cache.GetMetaData(n)
 		resolved, _ := resolver.Resolve(string(n))
-		n := resolver.Title(n, meta)
-		uris[n] = resolved.URI
-		titles = append(titles, n)
+		t := resolver.Title(n, meta)
+		uris[t] = resolved.URI
+		titles = append(titles, t)
 	}
 
-	hits := filterWithinDistanceParallel(query, titles, 3, max_results)
+	k := 2 // tolerate up to 2 typos
+	hits := filterByBitapFuzzyParallel(query, titles, k, maxResults)
 
 	var symbols []protocol.SymbolInformation
-
 	for _, h := range hits {
-		uri, _ := uris[h]
+		uri := uris[h]
 		symbols = append(symbols, protocol.SymbolInformation{
 			Name:     h,
 			Kind:     protocol.SymbolKindFile,
@@ -113,36 +114,31 @@ func (s *Server) workspaceSymbol(
 	return symbols, nil
 }
 
-func levenshteinDistance(a, b string) int {
-	if len(a) < len(b) {
-		a, b = b, a
-	}
-	lenA, lenB := len(a), len(b)
-
-	prev := make([]int, lenB+1)
-	for j := 0; j <= lenB; j++ {
-		prev[j] = j
+// filterByBitapFuzzyParallel filters paths by approximate Bitap matching with k errors
+func filterByBitapFuzzyParallel(pattern string, paths []string, k, maxHits int) []string {
+	if utf8.RuneCountInString(pattern) == 0 {
+		return nil
 	}
 
-	for i := 1; i <= lenA; i++ {
-		cur := make([]int, lenB+1)
-		cur[0] = i
-		for j := 1; j <= lenB; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			deletion := prev[j] + 1
-			insertion := cur[j-1] + 1
-			substitution := prev[j-1] + cost
-			cur[j] = min(deletion, insertion, substitution)
+	patternRunes := []rune(pattern)
+	m := len(patternRunes)
+	if m == 0 {
+		return nil
+	}
+	if m > 63 {
+		patternRunes = patternRunes[:63]
+		m = 63
+	}
+
+	var masks [128]uint64
+	for i, r := range patternRunes {
+		if r < 128 {
+			masks[r] |= 1 << uint(i)
 		}
-		prev = cur
 	}
-	return prev[lenB]
-}
 
-func filterWithinDistanceParallel(target string, paths []string, k, maxHits int) []string {
+	highest := uint64(1) << uint(m-1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -153,8 +149,6 @@ func filterWithinDistanceParallel(target string, paths []string, k, maxHits int)
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 
 	for _, s := range paths {
-
-		// Check for early termination
 		if atomic.LoadInt32(&hitCount) >= int32(maxHits) || ctx.Err() != nil {
 			break
 		}
@@ -162,7 +156,7 @@ func filterWithinDistanceParallel(target string, paths []string, k, maxHits int)
 		wg.Add(1)
 		sem <- struct{}{}
 
-		go func(str string) {
+		go func(text string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -170,14 +164,11 @@ func filterWithinDistanceParallel(target string, paths []string, k, maxHits int)
 				return
 			}
 
-			distance := levenshteinDistance(target, str)
-			if distance < k {
-				// Increment and check hit count atomically
+			if bitapFuzzyMatch(text, masks, highest, k) {
 				count := atomic.AddInt32(&hitCount, 1)
 				if count <= int32(maxHits) {
-					results <- str
+					results <- text
 					if count == int32(maxHits) {
-						// reached limit, cancel remaining
 						cancel()
 					}
 				}
@@ -195,4 +186,46 @@ func filterWithinDistanceParallel(target string, paths []string, k, maxHits int)
 		filtered = append(filtered, s)
 	}
 	return filtered
+}
+
+// bitapFuzzyMatch returns true if pattern appears in text with at most k errors
+func bitapFuzzyMatch(text string, masks [128]uint64, highest uint64, k int) bool {
+	r := make([]uint64, k+1)
+	for d := 0; d <= k; d++ {
+		r[d] = 0
+	}
+
+	for _, cr := range text {
+		var charMask uint64
+		if cr < 128 {
+			charMask = masks[cr]
+		} else {
+			charMask = 0
+		}
+
+		// Update R[0]
+		r0 := ((r[0] << 1) | 1) & charMask
+		r[0] = r0
+
+		// Update R[d] for 1..k errors
+		prevRd1 := r0
+		for d := 1; d <= k; d++ {
+			// Substitution / match
+			rx := ((r[d] << 1) | 1) & charMask
+			xi := (r[d] << 1) | 1
+			xd := prevRd1
+
+			newRd := rx | xi | xd
+			prevRd1 = r[d]
+			r[d] = newRd
+		}
+
+		// If any R[d] has bit (m-1) set, match within d errors
+		for d := 0; d <= k; d++ {
+			if (r[d] & highest) != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

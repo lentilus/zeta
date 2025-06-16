@@ -1,7 +1,10 @@
 package server
 
 import (
-	"strings"
+	"context"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
@@ -83,46 +86,113 @@ func (s *Server) workspaceSymbol(
 	query := params.Query
 
 	notes := s.cache.GetPaths()
-	counter := 0
+
+	titles := make([]string, 0, len(notes))
+	uris := make(map[string]string, len(notes))
+
+	for _, n := range notes {
+		meta, _ := s.cache.GetMetaData(n)
+		resolved, _ := resolver.Resolve(string(n))
+		n := resolver.Title(n, meta)
+		uris[n] = resolved.URI
+		titles = append(titles, n)
+	}
+
+	hits := filterWithinDistanceParallel(query, titles, 3, max_results)
 
 	var symbols []protocol.SymbolInformation
 
-	for _, note := range notes {
-		meta, _ := s.cache.GetMetaData(note)
-		name := resolver.Title(note, meta)
-		if isSubsequence(query, name) {
-			resolved, _ := resolver.Resolve(note)
-			symbols = append(symbols, protocol.SymbolInformation{
-				Name:     name,
-				Kind:     protocol.SymbolKindFile,
-				Location: protocol.Location{URI: resolved.URI},
-			})
-			counter += 1
-			if counter == max_results {
-				break
-			}
-		}
+	for _, h := range hits {
+		uri, _ := uris[h]
+		symbols = append(symbols, protocol.SymbolInformation{
+			Name:     h,
+			Kind:     protocol.SymbolKindFile,
+			Location: protocol.Location{URI: uri},
+		})
 	}
 	return symbols, nil
 }
 
-func isSubsequence(pattern, text string) bool {
-	// convert pattern to runes so we compare full Unicode codepoints
-	pattern = strings.ToLower(pattern)
-	text = strings.ToLower(text)
-	pr := []rune(pattern)
-	if len(pr) == 0 {
-		return true // empty pattern always matches
+func levenshteinDistance(a, b string) int {
+	if len(a) < len(b) {
+		a, b = b, a
+	}
+	lenA, lenB := len(a), len(b)
+
+	prev := make([]int, lenB+1)
+	for j := 0; j <= lenB; j++ {
+		prev[j] = j
 	}
 
-	i := 0
-	for _, r := range text {
-		if r == pr[i] {
-			i++
-			if i == len(pr) {
-				return true
+	for i := 1; i <= lenA; i++ {
+		cur := make([]int, lenB+1)
+		cur[0] = i
+		for j := 1; j <= lenB; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
 			}
+			deletion := prev[j] + 1
+			insertion := cur[j-1] + 1
+			substitution := prev[j-1] + cost
+			cur[j] = min(deletion, insertion, substitution)
 		}
+		prev = cur
 	}
-	return false
+	return prev[lenB]
+}
+
+func filterWithinDistanceParallel(target string, paths []string, k, maxHits int) []string {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	results := make(chan string, maxHits)
+	var hitCount int32
+
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+
+	for _, s := range paths {
+
+		// Check for early termination
+		if atomic.LoadInt32(&hitCount) >= int32(maxHits) || ctx.Err() != nil {
+			break
+		}
+
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(str string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			distance := levenshteinDistance(target, str)
+			if distance < k {
+				// Increment and check hit count atomically
+				count := atomic.AddInt32(&hitCount, 1)
+				if count <= int32(maxHits) {
+					results <- str
+					if count == int32(maxHits) {
+						// reached limit, cancel remaining
+						cancel()
+					}
+				}
+			}
+		}(s)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var filtered []string
+	for s := range results {
+		filtered = append(filtered, s)
+	}
+	return filtered
 }

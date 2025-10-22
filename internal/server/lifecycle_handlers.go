@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"log"
 	"net/url"
 	"os"
@@ -15,9 +14,7 @@ import (
 	"zeta/internal/cache"
 	"zeta/internal/config"
 	"zeta/internal/manager"
-	"zeta/internal/parser"
 	"zeta/internal/resolver"
-	"zeta/internal/scanner"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -35,9 +32,10 @@ func (s *Server) initialize(
 	s.config = config
 	log.Printf("Config: %v", config)
 
-	// Root
 	rootUri, _ := url.Parse(*params.RootURI)
-	resolver.Configure(
+	s.rootPath = rootUri.Path
+
+	err = resolver.Configure(
 		rootUri.Path,
 		config.SelectRegex,
 		config.FileExtensions,
@@ -45,95 +43,9 @@ func (s *Server) initialize(
 		config.TitleTemplate,
 		config.TitleSubstitutions,
 	)
-
-	// Cache File
-	stateBaseDir, _ := getXDGStateHome("zeta")
-	hash := sha256.New()
-	b, err := json.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
-	hash.Write([]byte(b))
-	configHash := hex.EncodeToString(hash.Sum(nil))
-	cacheDir := path.Join(stateBaseDir, url.PathEscape(rootUri.Path), configHash)
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
-		return "", fmt.Errorf("failed to create state directory: %w", err)
-	}
-	cacheFile := path.Join(cacheDir, "cache.json")
-
-	// Restore from cache.
-	dump, err := os.ReadFile(cacheFile)
-	if err != nil {
-		s.cache = cache.NewCache()
-	} else {
-		s.cache, err = cache.RestoreCache(dump)
-		if err != nil {
-			s.cache = cache.NewCache()
-		}
-	}
-
-	// Document Manager
-	s.manager = manager.NewDocumentManager()
-
-	// Parsers
-	parsers := parser.NewParserPool(10)
-
-	// Note directory scanning + cache validation.
-	seenNotes := map[cache.Path]struct{}{}
-	skip := func(absolutepath string, info fs.FileInfo) bool {
-		note, err := resolver.Resolve(absolutepath)
-		if err != nil {
-			return true
-		}
-		seenNotes[note.CachePath] = struct{}{}
-		lastSeen := s.cache.GetSaveTime(note.CachePath)
-
-		hasNotChanged := lastSeen.After(info.ModTime())
-		if !hasNotChanged {
-			log.Printf("Note %s was was changed", absolutepath)
-		}
-		return hasNotChanged
-	}
-	now := time.Now()
-
-	callback := func(absolutepath string, document []byte) {
-		note, err := resolver.Resolve(absolutepath)
-		if err != nil {
-			log.Printf("Unexpected error resolving %v", err)
-		}
-		nodes, err := parsers.ParseAndQuery(document, []byte(s.config.Query))
-		if err != nil {
-			log.Printf("Unexpected error parsing %v", err)
-		}
-		links, meta := resolver.ExtractLinksAndMeta(note, nodes, document)
-		err = s.cache.SaveNote(note.CachePath, links, meta, now)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	go func() {
-		scanner.Scan(rootUri.Path, skip, callback)
-		notes := s.cache.GetPaths()
-		for _, note := range notes {
-			if _, ok := seenNotes[note]; !ok {
-				s.cache.DeleteNote(note)
-			}
-		}
-	}()
-
-	// Start cache dump routine.
-	ticker := time.NewTicker(5 * time.Minute)
-	go func() {
-		for range ticker.C {
-			log.Printf("Dumping cache to %s", cacheFile)
-			dump := s.cache.Dump()
-			err := os.WriteFile(cacheFile, dump, 0644)
-			if err != nil {
-				log.Printf("Error during cache dump: %v", err)
-			}
-		}
-	}()
 
 	syncKind := protocol.TextDocumentSyncKindIncremental
 
@@ -153,7 +65,51 @@ func (s *Server) initialized(
 	context *glsp.Context,
 	params *protocol.InitializedParams,
 ) error {
-	log.Println("Client initialized.")
+	// Cache File
+	stateBaseDir, _ := getXDGStateHome("zeta")
+	hash := sha256.New()
+	b, err := json.Marshal(s.config)
+	if err != nil {
+		return err
+	}
+	hash.Write([]byte(b))
+	configHash := hex.EncodeToString(hash.Sum(nil))
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.rootPath), configHash)
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return fmt.Errorf("failed to create state directory: %w", err)
+	}
+	cacheFile := path.Join(cacheDir, "cache.json")
+
+	s.manager = manager.NewDocumentManager()
+
+	// Restore from cache.
+	dump, err := os.ReadFile(cacheFile)
+	if err != nil {
+		s.cache = cache.NewCache()
+	} else {
+		s.cache, err = cache.RestoreCache(dump)
+		if err != nil {
+			s.cache = cache.NewCache()
+		}
+	}
+
+	err = indexNotes(s.rootPath, context, s.cache, s.config.Query)
+	if err != nil {
+	    return err
+	}
+
+	// Start cache dump routine.
+	ticker := time.NewTicker(5 * time.Minute)
+	go func() {
+		for range ticker.C {
+			log.Printf("Dumping cache to %s", cacheFile)
+			dump := s.cache.Dump()
+			err := os.WriteFile(cacheFile, dump, 0644)
+			if err != nil {
+				log.Printf("Error during cache dump: %v", err)
+			}
+		}
+	}()
 	return nil
 }
 

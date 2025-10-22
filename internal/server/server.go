@@ -14,6 +14,7 @@ type Server struct {
 	cache     cache.Cache
 	manager   *manager.DocumentManager
 	graphAddr string
+	rootPath  string
 	config    config.Config
 }
 

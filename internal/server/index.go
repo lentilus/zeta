@@ -13,14 +13,7 @@ import (
 	"zeta/internal/scanner"
 
 	"github.com/tliron/glsp"
-	protocol "github.com/tliron/glsp/protocol_3_16"
 )
-
-
-type ProgressParamsFixed struct {
-    Token any `json:"token"`
-    Value any `json:"value"`
-}
 
 func indexNotes(
 	rootPath string,
@@ -36,42 +29,6 @@ func indexNotes(
 	var changedCount int32
 	var processedCount int32
 
-	progressToken := "indexing-progress"
-
-	// TODO: this may also suffer from token unmarshal bug in glsp
-	context.Call("window/workDoneProgress/create", protocol.WorkDoneProgressCreateParams{Token: protocol.ProgressToken{Value: progressToken}}, nil)
-
-	sendProgress := func(kind string) {
-		msg := fmt.Sprintf("updating %d/%d [total %d]", atomic.LoadInt32(&processedCount),
-			atomic.LoadInt32(&changedCount),
-			atomic.LoadInt32(&totalCount))
-
-		var value any
-		switch kind {
-		case "begin":
-			value = protocol.WorkDoneProgressBegin{
-				Kind:        "begin",
-				Title:       "Cache",
-				Cancellable: &protocol.False,
-				Message:     &msg,
-			}
-		case "report":
-			value = protocol.WorkDoneProgressReport{
-				Kind:    "report",
-				Message: &msg,
-			}
-		case "end":
-			value = protocol.WorkDoneProgressEnd{
-				Kind:    "end",
-				Message: &msg,
-			}
-		}
-
-		context.Notify("$/progress", ProgressParamsFixed{
-			Token: progressToken,
-			Value: value,
-		})
-	}
 
 	skipFunc := func(absolutepath string, info fs.FileInfo) bool {
 		note, err := resolver.Resolve(absolutepath)
@@ -117,17 +74,20 @@ func indexNotes(
 		defer ticker.Stop()
 
 		// progress reporting
+		reporter := NewProgressReporter(context)
 		go func() {
 			defer close(done)
-		    sendProgress("begin")
+			reporter.Begin("Indexing", "starting")
 			for {
 				select {
 				case <-stopCh:
-					sendProgress("end")
+					reporter.End("")
 					return
 				case <-ticker.C:
-					log.Println("Sending report")
-					sendProgress("report")
+					msg := fmt.Sprintf("updating %d/%d [total %d]", atomic.LoadInt32(&processedCount),
+					    atomic.LoadInt32(&changedCount),
+						atomic.LoadInt32(&totalCount))
+					reporter.Report(msg)
 				}
 			}
 		}()

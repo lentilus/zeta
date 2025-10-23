@@ -7,7 +7,9 @@ import (
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
+// TODO: make tokenCounter concurrency safe
 var tokenCounter uint = 0
+
 var prefix string = "zeta-progress-"
 
 type progressReporter struct{

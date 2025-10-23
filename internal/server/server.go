@@ -4,6 +4,7 @@ import (
 	"zeta/internal/cache"
 	"zeta/internal/config"
 	"zeta/internal/manager"
+	"zeta/internal/embed"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
@@ -13,8 +14,8 @@ type Server struct {
 	handler   *protocol.Handler
 	cache     cache.Cache
 	manager   *manager.DocumentManager
+	embedder  embed.Embedder
 	graphAddr string
-	rootPath  string
 	config    config.Config
 }
 

@@ -15,19 +15,25 @@ import (
 	"github.com/tliron/glsp"
 )
 
-func indexNotes(
-	rootPath string,
-	context *glsp.Context,
-	noteCache cache.Cache,
-	tsQuery string,
-) error {
+type documentScan struct{
+	note resolver.Note
+	content []byte
+}
+
+func (s *Server) indexNotes(context *glsp.Context) error {
+	cacheQueue := make(chan documentScan, 100)
+	embedQueue := make(chan documentScan, 100)
+
 	parsers := parser.NewParserPool(10)
 	seenNotes := map[cache.Path]struct{}{}
 	now := time.Now()
 
-	var totalCount int32
-	var changedCount int32
-	var processedCount int32
+	var (
+		totalCount int32
+		todoCount int32
+		cachedCount int32
+		embeddedCount int32
+	)
 
 
 	skipFunc := func(absolutepath string, info fs.FileInfo) bool {
@@ -38,71 +44,104 @@ func indexNotes(
 		seenNotes[note.CachePath] = struct{}{}
 
 		atomic.AddInt32(&totalCount, 1)
-		lastSeen := noteCache.GetSaveTime(note.CachePath)
+		lastSeen := s.cache.GetSaveTime(note.CachePath)
 		hasNotChanged := lastSeen.After(info.ModTime())
 		if !hasNotChanged {
-			atomic.AddInt32(&changedCount, 1)
+			atomic.AddInt32(&todoCount, 1)
 		}
 		return hasNotChanged
 	}
 
 	callbackFunc := func(absolutepath string, document []byte) {
-		defer atomic.AddInt32(&processedCount, 1)
-
 		note, err := resolver.Resolve(absolutepath)
 		if err != nil {
 			log.Printf("Unexpected error resolving %v", err)
 			return
 		}
 
-		nodes, err := parsers.ParseAndQuery(document, []byte(tsQuery))
-		if err != nil {
-			log.Printf("Unexpected error parsing %v", err)
-			return
+		doc := documentScan{
+			note: note,
+			content: document,
 		}
 
-		links, meta := resolver.ExtractLinksAndMeta(note, nodes, document)
-		if err := noteCache.SaveNote(note.CachePath, links, meta, now); err != nil {
-			log.Println(err)
-		}
+		cacheQueue<-doc
+		embedQueue<-doc
 	}
 
-	go func() {
-		stopCh := make(chan struct{})
-		done := make(chan struct{}) // signal when ticker is done
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
 
-		// progress reporting
-		reporter := NewProgressReporter(context)
-		go func() {
-			defer close(done)
-			reporter.Begin("Indexing", "starting")
-			for {
-				select {
-				case <-stopCh:
-					reporter.End("")
-					return
-				case <-ticker.C:
-					msg := fmt.Sprintf("updating %d/%d [total %d]", atomic.LoadInt32(&processedCount),
-					    atomic.LoadInt32(&changedCount),
-						atomic.LoadInt32(&totalCount))
-					reporter.Report(msg)
-				}
+	go func(){
+		// cache new notes
+		progress := NewProgressReporter(context)
+		var msg string
+
+		progress.Begin("Caching", msg)
+
+
+		// TODO: make this concurrent
+	    for d := range cacheQueue {
+			nodes, err := parsers.ParseAndQuery(d.content, []byte(s.config.Query))
+			if err != nil {
+				log.Printf("Unexpected error parsing %v", err)
+				return
 			}
-		}()
 
-		scanner.Scan(rootPath, skipFunc, callbackFunc)
+			links, meta := resolver.ExtractLinksAndMeta(d.note, nodes, d.content)
+			if err := s.cache.SaveNote(d.note.CachePath, links, meta, now); err != nil {
+				log.Println(err)
+			}
 
-		for _, note := range noteCache.GetPaths() {
+		    atomic.AddInt32(&cachedCount, 1)
+
+			msg = fmt.Sprintf(
+				"updating %d/%d [total %d]",
+				atomic.LoadInt32(&cachedCount),
+			    atomic.LoadInt32(&todoCount),
+			    atomic.LoadInt32(&totalCount))
+			progress.Report(msg)
+	    }
+
+		progress.End(msg)
+
+		// purge stale notes
+		for _, note := range s.cache.GetPaths() {
 			if _, ok := seenNotes[note]; !ok {
-				noteCache.DeleteNote(note)
+				s.cache.DeleteNote(note)
 			}
 		}
-
-		close(stopCh)
-		<-done
 	}()
+
+	// Embedding
+	go func() {
+		progress := NewProgressReporter(context)
+		var msg string
+
+		progress.Begin("Embedding", msg)
+
+		// NOTE: dont make this concurrent to save ressources
+	    for d := range embedQueue {
+	    	log.Printf("embedding %s", d.note.CachePath)
+
+		    atomic.AddInt32(&embeddedCount, 1)
+
+			msg = fmt.Sprintf(
+				"updating %d/%d [total %d]",
+				atomic.LoadInt32(&embeddedCount),
+			    atomic.LoadInt32(&todoCount),
+			    atomic.LoadInt32(&totalCount))
+			progress.Report(msg)
+
+			// TODO: check argument order
+			s.embedder.Embed(d.note.CachePath, string(d.content))
+	    }
+		progress.End(msg)
+
+		// TODO: remove stale embeddings
+	}()
+
+	scanner.Scan(s.config.Root, skipFunc, callbackFunc)
+
+	close(cacheQueue)
+	close(embedQueue)
 
 	return nil
 }

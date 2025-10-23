@@ -13,6 +13,7 @@ import (
 	"time"
 	"zeta/internal/cache"
 	"zeta/internal/config"
+	"zeta/internal/embed"
 	"zeta/internal/manager"
 	"zeta/internal/resolver"
 
@@ -29,14 +30,16 @@ func (s *Server) initialize(
 		return nil, err
 	}
 
-	s.config = config
-	log.Printf("Config: %v", config)
-
+	// TODO: document that we are overriding config root here
 	rootUri, _ := url.Parse(*params.RootURI)
-	s.rootPath = rootUri.Path
+	config.Root = rootUri.Path
+
+	s.config = config
+
+	log.Printf("Config: %v", s.config)
 
 	err = resolver.Configure(
-		rootUri.Path,
+		config.Root,
 		config.SelectRegex,
 		config.FileExtensions,
 		config.DefaultExtension,
@@ -74,13 +77,14 @@ func (s *Server) initialized(
 	}
 	hash.Write([]byte(b))
 	configHash := hex.EncodeToString(hash.Sum(nil))
-	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.rootPath), configHash)
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.config.Root), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 	cacheFile := path.Join(cacheDir, "cache.json")
 
 	s.manager = manager.NewDocumentManager()
+	s.embedder = embed.NewTestEmbedder()
 
 	// Restore from cache.
 	dump, err := os.ReadFile(cacheFile)
@@ -93,7 +97,8 @@ func (s *Server) initialized(
 		}
 	}
 
-	err = indexNotes(s.rootPath, context, s.cache, s.config.Query)
+	log.Println("Starting indexing")
+	err = s.indexNotes(context)
 	if err != nil {
 	    return err
 	}

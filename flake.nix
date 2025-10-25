@@ -15,19 +15,18 @@
             sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
           };
 
+          llama-cpp = prev.fetchFromGitHub {
+            owner = "ggml-org";
+            repo = "llama.cpp";
+            rev = "5a91109a5d7dab5d7adc40bedb397ede99a705b1";
+            sha256 = "sha256-4jc1Lk9Qa/S0oBDp3BbFYz35X791LYOG+/C7gyn2EXw=";
+          };
+
           tree-sitter-typst = prev.fetchFromGitHub {
             owner = "uben0";
             repo = "tree-sitter-typst";
             rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
             sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
-          };
-
-          go-llama-src = prev.fetchFromGitHub {
-            owner = "go-skynet";
-            repo = "go-llama.cpp";
-            rev = "6a8041ef6b46d4712afc3ae791d1c2d73da0ad1c";
-            sha256 = "sha256-IcgyWLnzvNQ0QRCJXhME8j/95PuyGlDjF6cxT2k5gIE=";
-            fetchSubmodules = true;
           };
         });
 
@@ -39,34 +38,63 @@
         # MUSL variant of the same package-set — we build the static binary with this
         mpkgs = pkgs.pkgsMusl;
 
-        # Prebuild the go-llama.cpp binding library as a separate derivation.
-        # This produces $libgo-llama/lib/libbinding.a and $libgo-llama/include/...
-        libgo-llama = mpkgs.stdenv.mkDerivation rec {
-          pname = "go-llama-binding";
-          version = "0.1";
-          src = pkgs.go-llama-src;
-
-          nativeBuildInputs = [ mpkgs.gcc mpkgs.gnumake mpkgs.cmake ];
-
+        llama-cpp = mpkgs.stdenv.mkDerivation rec {
+          pname = "llama-cpp";
+          version = "local";
+          src = ./deps/llama.cpp;
+        
+          nativeBuildInputs = [
+            mpkgs.cmake
+            mpkgs.ninja
+            mpkgs.pkgconf
+          ];
+        
+          buildInputs = [ mpkgs.zlib mpkgs.gcc ];
+        
           configurePhase = ''
-            # nothing to do
+            export CC=${mpkgs.gcc}/bin/gcc
+            export CXX=${mpkgs.gcc}/bin/g++
+            mkdir -p build
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DLLAMA_BUILD_EXAMPLES=OFF \
+              -DLLAMA_BUILD_TESTS=OFF \
+              -DLLAMA_BUILD_SERVER=OFF \
+              -DLLAMA_BUILD_LLAMA_CLI=OFF \
+              -DLLAMA_CURL=OFF \
+              -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+              -DCMAKE_INSTALL_PREFIX=$out
           '';
-
+        
           buildPhase = ''
-            # build the static binding
-            make libbinding.a
+            cmake --build build --parallel ''${NIX_BUILD_CORES:-1}
           '';
-
+        
           installPhase = ''
-            ls -al
-            exit 1
+            mkdir -p "$out/lib" "$out/include"
+        
+            # copy static libs
+            find build -type f -name '*.a' -exec cp -v '{}' "$out/lib/" \;
+        
+            # copy headers
+            cp -r include/* "$out/include/" 2>/dev/null || true
+            cp -r build/include/* "$out/include/" 2>/dev/null || true
+        
+            # install pkg-config file if it exists
+            if [ -f build/llama.pc ]; then
+              mkdir -p "$out/lib/pkgconfig"
+              cp build/llama.pc "$out/lib/pkgconfig/"
+            fi
           '';
         };
+
+        version = "0.3.6";
 
       in {
         packages.default = mpkgs.buildGoModule rec {
           pname   = "zeta";
-          version = "0.3.6";
+          version = version;
           src     = ./.;
 
           buildInputs = [ mpkgs.go mpkgs.gcc ];
@@ -76,113 +104,72 @@
           env = {
             CGO_ENABLED = "1";
             CC = "${mpkgs.stdenv.cc}";
-            LIBRARY_PATH = "${libgo-llama}/lib";
-            C_INCLUDE_PATH = "${libgo-llama}/include";
-            # If linking errors happen in the static binary, you may need to add:
-            # CGO_LDFLAGS = "-L${libgo-llama}/lib -lbinding -lstdc++"
           };
 
           # static link against musl
           ldflags = [
             "-s" "-w"
             "-linkmode external"
-            "-extldflags '-static -L${mpkgs.musl}/lib'"
+            "-extldflags '-static -L${mpkgs.musl}/lib -lbinding -lstdc++'"
             "-X main.Version=v${version}"
           ];
 
-          vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
+          vendorHash = "sha256-RfGPeZ3Tug2CsSV2zkzy+9k3v3KDFsCWvJj8hdVj0SY=";
           doCheck    = false;
-
-          patchPhase = ''
-            mkdir -p external/_vendor
-            rm -rf .gitignore
-            cp -r ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-            cp -r ${pkgs.force-graph}   external/_vendor/force-graph.js
-
-            # create a tiny helper dir so code requiring a local external/go-llama.cpp path still works
-            mkdir -p external/go-llama.cpp
-            echo "Using prebuilt go-llama binding from: ${libgo-llama}" > external/go-llama.cpp/README
-          '';
         };
+
+        packages.llama = llama-cpp;
+
+        packages.vendor = pkgs.writeShellScriptBin "vendor" ''
+          echo "Populating deps directory..."
+          rm -rf deps
+          mkdir -p deps
+          cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-typst} deps/tree-sitter-typst
+          cp -r --no-preserve=mode,ownership ${pkgs.force-graph} deps/force-graph.js
+          cp -r --no-preserve=mode,ownership ${pkgs.llama-cpp} deps/llama.cpp
+
+          echo "deps directory is now up to date."
+        '';
 
         devShells.default = pkgs.mkShell {
           shellHook = ''
-            echo "== Welcome to zeta dev shell =="
+            cat << "EOF"
+            == Welcome to zeta v${version} ==
+            - update deps with `nix run .#vendor`
+            - test with  `debug`
+            EOF
           '';
 
-          buildInputs = with pkgs; [
+          buildInputs = let 
+            _neovim = (pkgs.neovim.override {
+              configure = {
+                packages.myPlugins = with pkgs.vimPlugins; {
+                  start = [
+                    fidget-nvim
+                    nvim-notify
+                  ];
+                };
+              };
+            });
+          in with pkgs; [
             go
             gopls
             gofumpt
             gotools
             golines
-            typst
-            tinymist
-            pv
             # helper commands that live in the original flake
             (writeShellScriptBin "debug" ''
               rm -rf /tmp/zeta-testing/*
               mkdir -p /tmp/zeta-test-notes
               mkdir -p /tmp/zeta-testing
 
-              # Ensure we point to the prebuilt binding library in the store
-              export LIBBINDING_LIB="${libgo-llama}/lib/libbinding.a"
-              export LIBBINDING_LIB_DIR="${libgo-llama}/lib"
-              export LIBBINDING_INCLUDE_DIR="${libgo-llama}/include"
-
-              if [ ! -f "${libgo-llama}/lib/libbinding.a" ]; then
-                echo "Prebuilt libbinding.a not found at ${libgo-llama}/lib/libbinding.a"
-                echo "Try running: nix build .#libgo-llama"
-                exit 1
-              fi
-
-              # Build the go binary for debugging; the buildGoModule will already use the same store path.
-              CGO_ENABLED=1 CC="${mpkgs.stdenv.cc}" \
-                LIBRARY_PATH="${libgo-llama}/lib" C_INCLUDE_PATH="${libgo-llama}/include" \
-                go build -o /tmp/zeta-testing/zeta -gcflags=all=-N . || exit
+              go build -o /tmp/zeta-testing/zeta -gcflags=all=-N . || exit
 
               PATH="/tmp/zeta-testing:$PATH"
-              exec ${neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
-            '')
-            (writeShellScriptBin "debugRelease" ''
-              rm -rf /tmp/zeta-testing/*
-              mkdir -p /tmp/zeta-test-notes
-              mkdir -p /tmp/zeta-testing
-              nix build .#zeta || exit
-              cp result/bin/zeta /tmp/zeta-testing/zeta
-              PATH="/tmp/zeta-testing:$PATH"
-              exec ${neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
-            '')
-            (writeShellScriptBin "vendor" ''
-              echo "Populating _vendor directory..."
-              rm -rf external/_vendor
-              mkdir -p external/_vendor
-              cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-              cp -r --no-preserve=mode,ownership ${pkgs.force-graph} external/_vendor/force-graph.js
-
-              echo "Using prebuilt go-llama binding from ${libgo-llama}"
-              # Optionally expose a copy for local editing (not required)
-              rm -rf external/go-llama.cpp
-              mkdir -p external/go-llama.cpp
-              cp -r ${libgo-llama}/include external/go-llama.cpp/include || true
-              cp -r ${libgo-llama}/lib external/go-llama.cpp/lib || true
-
-              echo "_vendor directory is now up to date."
-            '')
-            (writeShellScriptBin "demo" ''
-              rm -rf /tmp/zeta-demo-notes
-              mkdir -p /tmp/zeta-demo-notes
-              cd /tmp/zeta-demo-notes
-
-              pv -qL 20 ${./_example/demo.txt} \
-                | script -q -c \
-                "stty rows $(tput lines) cols $(tput cols); \
-                nvim -u ${./_example/demo.lua}" \
-                /dev/null
+              exec ${_neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
             '')
           ];
 
-          # bring neovim into the shell for the scripts above
           nativeBuildInputs = with pkgs; [ neovim ];
         };
       }

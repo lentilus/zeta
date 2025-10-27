@@ -57,14 +57,14 @@
             mkdir -p build
             cmake -S . -B build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+              -DCMAKE_INSTALL_PREFIX=$out \
               -DBUILD_SHARED_LIBS=OFF \
               -DLLAMA_BUILD_EXAMPLES=OFF \
               -DLLAMA_BUILD_TESTS=OFF \
               -DLLAMA_BUILD_SERVER=OFF \
-              -DLLAMA_BUILD_LLAMA_CLI=OFF \
               -DLLAMA_CURL=OFF \
-              -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-              -DCMAKE_INSTALL_PREFIX=$out
+              -DGGML_OPENMP=ON 
           '';
         
           buildPhase = ''
@@ -74,13 +74,12 @@
           installPhase = ''
             mkdir -p "$out/lib" "$out/include"
         
-            # copy static libs
             find build -type f -name '*.a' -exec cp -v '{}' "$out/lib/" \;
+            find common -type f -name '*.h' -exec cp -v '{}' "$out/include/" \;
         
-            # copy headers
-            cp -r include/* "$out/include/" 2>/dev/null || true
-            cp -r build/include/* "$out/include/" 2>/dev/null || true
-        
+            cp -r include/* "$out/include/"
+            cp -r ggml/include/* "$out/include/"
+
             # install pkg-config file if it exists
             if [ -f build/llama.pc ]; then
               mkdir -p "$out/lib/pkgconfig"
@@ -88,6 +87,52 @@
             fi
           '';
         };
+
+        llamago-shim = mpkgs.stdenv.mkDerivation rec {
+          pname = "llamago-shim";
+          version = "local";
+        
+          src = ./cpp;
+        
+          nativeBuildInputs = [ mpkgs.gcc mpkgs.binutils ];
+          buildInputs = [ ];
+        
+          configurePhase = ''
+            export CC=${mpkgs.gcc}/bin/gcc
+            export CXX=${mpkgs.gcc}/bin/g++
+          '';
+        
+          buildPhase = ''
+            mkdir -p build
+        
+            ''${CXX} -O3 -fPIC \
+              -I${llama-cpp}/include \
+              -I${llama-cpp}/include/ggml \
+              -c ${src}/llama_go_shim.cpp -o build/llama_go_shim.o
+        
+            # pack static archive
+            ${mpkgs.binutils}/bin/ar rcs build/libllamago_shim.a build/llama_go_shim.o
+          '';
+        
+          installPhase = ''
+            mkdir -p $out/lib $out/include
+        
+            cp -v build/libllamago_shim.a $out/lib/
+        
+            cp -v ${src}/llama_go_shim.cpp $out/include/
+            cp -v ${src}/llama_go_shim.h $out/include/
+          '';
+        };
+
+        buildEnv = ''
+          export CGO_ENABLED=1
+          export CC=${mpkgs.gcc}/bin/gcc
+          export CXX=${mpkgs.gcc}/bin/g++
+
+          export CGO_CFLAGS="-I${llama-cpp}/include -I${llama-cpp}/ggml/include"
+          export CGO_LDFLAGS="-L${llama-cpp}/lib -L${llamago-shim}/lib -Wl,--start-group -lllamago_shim -lllama -lcommon -lggml -lggml-base -lggml-cpu -lgomp -lmtmd -lstdc++ -Wl,--end-group -lm -pthread -static"
+
+        '';
 
         version = "0.3.6";
 
@@ -119,6 +164,7 @@
         };
 
         packages.llama = llama-cpp;
+        packages.shim = llamago-shim;
 
         packages.vendor = pkgs.writeShellScriptBin "vendor" ''
           echo "Populating deps directory..."
@@ -138,6 +184,8 @@
             - update deps with `nix run .#vendor`
             - test with  `debug`
             EOF
+
+            ${buildEnv}
           '';
 
           buildInputs = let 
@@ -157,6 +205,7 @@
             gofumpt
             gotools
             golines
+
             # helper commands that live in the original flake
             (writeShellScriptBin "debug" ''
               rm -rf /tmp/zeta-testing/*

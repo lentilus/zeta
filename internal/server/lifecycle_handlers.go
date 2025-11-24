@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"zeta/internal/config"
 	"zeta/internal/embed"
 	"zeta/internal/manager"
+	"zeta/internal/parser"
 	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
@@ -31,21 +33,25 @@ func (s *Server) initialize(
 	}
 
 	// TODO: document that we are overriding config root here
-	rootUri, _ := url.Parse(*params.RootURI)
+	if params.RootURI == nil {
+		return nil, errors.New("No Root given")
+	}
+
+
+	rootUri, err := url.Parse(*params.RootURI)
+	if err != nil {
+		return nil, err
+	}
 	config.Root = rootUri.Path
+
+	parser.AddFormat("typst", config.Typst)
+	parser.AddFormat("markdown", config.Markdown)
 
 	s.config = config
 
 	log.Printf("Config: %v", s.config)
 
-	err = resolver.Configure(
-		config.Root,
-		config.SelectRegex,
-		config.FileExtensions,
-		config.DefaultExtension,
-		config.TitleTemplate,
-		config.TitleSubstitutions,
-	)
+	err = resolver.Configure(config.Root, config.Extensions)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +138,6 @@ func getXDGStateHome(appName string) (string, error) {
 		xdgStateHome = filepath.Join(homeDir, ".local", "state")
 	}
 
-	// Final path for your app
 	appStateDir := filepath.Join(xdgStateHome, appName)
 
 	// Create it if it doesn't exist

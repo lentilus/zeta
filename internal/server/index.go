@@ -24,7 +24,7 @@ func (s *Server) indexNotes(context *glsp.Context) error {
 	cacheQueue := make(chan documentScan, 100)
 	embedQueue := make(chan documentScan, 100)
 
-	parsers := parser.NewParserPool(10)
+	parsers := parser.NewParserPool(10, "typst")
 	seenNotes := map[cache.Path]struct{}{}
 	now := time.Now()
 
@@ -79,16 +79,11 @@ func (s *Server) indexNotes(context *glsp.Context) error {
 
 		// TODO: make this concurrent
 	    for d := range cacheQueue {
-			nodes, err := parsers.ParseAndQuery(d.content, []byte(s.config.Query))
-			if err != nil {
-				log.Printf("Unexpected error parsing %v", err)
-				return
-			}
-
-			links, meta := resolver.ExtractLinksAndMeta(d.note, nodes, d.content)
+			links, meta := parsers.ParseAndExtractLinksAndMeta(d.note, d.content)
 			if err := s.cache.SaveNote(d.note.CachePath, links, meta, now); err != nil {
 				log.Println(err)
 			}
+
 
 		    atomic.AddInt32(&cachedCount, 1)
 

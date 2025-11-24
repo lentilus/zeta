@@ -27,7 +27,7 @@ func NewDocumentManager() *DocumentManager {
 }
 
 // EnsureParser returns the parser for a URI, creating it if needed.
-func (dm *DocumentManager) EnsureParser(uri string) (*parser.Parser, error) {
+func (dm *DocumentManager) EnsureParser(uri string, language string) (*parser.Parser, error) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -35,7 +35,8 @@ func (dm *DocumentManager) EnsureParser(uri string) (*parser.Parser, error) {
 		return p, nil
 	}
 
-	p, err := parser.NewParser()
+	p, err := parser.NewParser(language)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser for %s: %w", uri, err)
 	}
@@ -89,15 +90,17 @@ func (dm *DocumentManager) ApplyIncrementalEdit(
 
 // GetLinks runs the full parse → query → extract pipeline.
 func (dm *DocumentManager) GetLinksAndMeta(
-	uri string,
-	queryString string,
+	note resolver.Note,
 ) ([]cache.Link, map[string]string, error) {
+
+
+
 	// Ensure parser + doc
-	p, err := dm.EnsureParser(uri)
+	p, err := dm.EnsureParser(note.URI, note.Format)
 	if err != nil {
 		return nil, nil, err
 	}
-	doc, err := dm.GetDocument(uri)
+	doc, err := dm.GetDocument(note.URI)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -106,18 +109,10 @@ func (dm *DocumentManager) GetLinksAndMeta(
 	if err := p.Parse(doc); err != nil {
 		return nil, nil, err
 	}
-	nodes, err := p.Query([]byte(queryString), doc)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	// Resolve note metadata
-	note, err := resolver.Resolve(uri)
-	if err != nil {
-		return nil, nil, err
-	}
-	links, meta := resolver.ExtractLinksAndMeta(note, nodes, doc)
-	// Extract and return links
+	links, meta := p.ExtractLinksAndMeta(note, doc)
+
 	return links, meta, nil
 }
 

@@ -7,7 +7,6 @@ toolchain go1.23.3
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
-	github.com/tliron/commonlog v0.2.19
 	github.com/tliron/glsp v0.2.3-0.20240808170048-d7cfc1c7abca
 )
 
@@ -24,6 +23,7 @@ require (
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/sourcegraph/jsonrpc2 v0.2.0 // indirect
+	github.com/tliron/commonlog v0.2.19 // indirect
 	github.com/tliron/kutil v0.3.26 // indirect
 	golang.org/x/crypto v0.26.0 // indirect
 	golang.org/x/sys v0.23.0 // indirect

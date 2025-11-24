@@ -88,8 +88,11 @@ func (s *Server) workspaceSymbol(
 	var symbols []protocol.SymbolInformation
 
 	for _, note := range notes {
-		meta, _ := s.cache.GetMetaData(note)
-		name := resolver.Title(note, meta)
+
+		// TODO: proper title
+		// meta, _ := s.cache.GetMetaData(note)
+		// name := resolver.Title(note, meta)
+		name := note
 		if isSubsequence(query, name) {
 			resolved, _ := resolver.Resolve(note)
 			symbols = append(symbols, protocol.SymbolInformation{

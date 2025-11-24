@@ -28,6 +28,13 @@
             rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
             sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
           };
+
+          tree-sitter-markdown = prev.fetchFromGitHub {
+            owner = "tree-sitter-grammars";
+            repo = "tree-sitter-markdown";
+            tag = "v0.5.1";
+            sha256 = "sha256-IYqh6JT74deu1UU4Nyls9Eg88BvQeYEta2UXZAbuZek=";
+          };
         });
 
         pkgs = import nixpkgs {
@@ -171,6 +178,7 @@
           rm -rf deps
           mkdir -p deps
           cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-typst} deps/tree-sitter-typst
+          cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-markdown} deps/tree-sitter-markdown
           cp -r --no-preserve=mode,ownership ${pkgs.force-graph} deps/force-graph.js
           cp -r --no-preserve=mode,ownership ${pkgs.llama-cpp} deps/llama.cpp
 

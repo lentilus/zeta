@@ -3,27 +3,38 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"zeta/internal/parser"
 	"io"
 )
 
+
 type Config struct {
-	Query              string   `json:"query"`
-	SelectRegex        string   `json:"select_regex"`
-	Root               string   `json:"root"` // only for dump!
-	FileExtensions     []string `json:"file_extensions"`
-	DefaultExtension   string   `json:"default_extension"`
-	TitleTemplate      string   `json:"title_template"`
-	TitleSubstitutions []string `json:"title_substitutions"`
+	Root     string `json:"root"` // only for dump!
+	Typst    parser.Format `json:"typst"`
+	Markdown parser.Format `json:"markdown"`
+	Extensions map[string]string `json:"extensions"`
 }
 
 var defaultConfig = Config{
-	Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
-	SelectRegex:        `^"(.*)"$`,
 	Root:               ".",
-	FileExtensions:     []string{".typ"},
-	DefaultExtension:   ".typ",
-	TitleTemplate:      "%s %s %s",
-	TitleSubstitutions: []string{"taxon", "title", "path"},
+	Typst: parser.Format{
+	    Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
+	    SelectRegex:        `^"(.*)"$`,
+	    DefaultExtension:   ".typ",
+	    TitleTemplate:      "%s %s %s",
+	    TitleSubstitutions: []string{"taxon", "title", "path"},
+	},
+	Markdown: parser.Format{
+	    Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
+	    SelectRegex:        `^"(.*)"$`,
+	    DefaultExtension:   ".md",
+	    TitleTemplate:      "%s %s %s",
+	    TitleSubstitutions: []string{"taxon", "title", "path"},
+	},
+	Extensions: map[string]string {
+		".typ" : "typst",
+		".md" : "markdown",
+	},
 }
 
 func Load(v any) (Config, error) {

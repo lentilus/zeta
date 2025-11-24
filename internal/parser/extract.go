@@ -9,7 +9,6 @@ import (
 	"zeta/internal/resolver"
 	"zeta/internal/sitteradapter"
 
-	sitter "github.com/smacker/go-tree-sitter"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
@@ -36,7 +35,7 @@ import (
 // 	return title
 // }
 
-func (p *Parser)ResolveReference(source resolver.Note, reference string) (resolver.Note, error) {
+func (p *Parser)resolveReference(source resolver.Note, reference string) (resolver.Note, error) {
 	if len(reference) == 0 {
 		return resolver.Note{}, fmt.Errorf("Invalid path.")
 	}
@@ -83,9 +82,12 @@ func (p *Parser)ResolveReference(source resolver.Note, reference string) (resolv
 
 func (p *Parser)ExtractLinksAndMeta(
 	note resolver.Note,
-	namedNodes map[string][]*sitter.Node,
 	document []byte,
 ) ([]cache.Link, map[string]string) {
+	namedNodes, err := p.query([]byte(p.format.Query), document)
+	if err != nil {
+		panic(err)
+	}
 	nodes := namedNodes["target"]
 	// Map to group ranges by target path, preserving insertion order
 	rangesMap := make(map[string][]protocol.Range)
@@ -94,7 +96,7 @@ func (p *Parser)ExtractLinksAndMeta(
 	for _, n := range nodes {
 		reference := (*n).Content(document)
 
-		target, err := p.ResolveReference(note, reference)
+		target, err := p.resolveReference(note, reference)
 		if err != nil {
 			continue
 		}

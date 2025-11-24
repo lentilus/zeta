@@ -2,45 +2,70 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"sync"
-	"unsafe"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-/*
-#cgo CFLAGS: -std=c11 -fPIC -I${SRCDIR}/../../external/_vendor/tree-sitter-typst/src
-
-#include "parser.c"
-#include "scanner.c"
-*/
-import "C"
-
-// Get the tree-sitter Language for this grammar.
 var (
-	typst       = unsafe.Pointer(C.tree_sitter_typst())
-	lang        = sitter.NewLanguage(typst)
 	captureName = "target"
+	configured bool = false
+	formats map[string]Format = make(map[string]Format)
+	regexes map[string]*regexp.Regexp = make(map[string]*regexp.Regexp)
 )
 
-// Parser wraps a tree-sitter parser instance along with a (possibly) stateful syntax tree.
-type Parser struct {
+// Format encapsulates the all info that the parser needs to work with a
+// document format.
+type Format struct {
+	Query              string   `json:"query"`
+	SelectRegex        string   `json:"select_regex"`
+	Extensions         []string `json:"extensions"`
+	DefaultExtension   string   `json:"default_extension"`
+	TitleTemplate      string   `json:"title_template"`
+	TitleSubstitutions []string `json:"title_substitutions"`
+}
+
+// Parser wraps a tree-sitter parser instance, with its language and syntax tree
+// as well as the config for the language format.
+type Parser struct{
 	parser *sitter.Parser
 	tree   *sitter.Tree
+	lang   *sitter.Language
+	format *Format
 	mu     sync.Mutex
 }
 
-// NewParser creates a new Parser using the default language and parses
-// the provided initialText if it is non-empty. It returns the Parser or an error.
-func NewParser() (*Parser, error) {
+func AddFormat(language string, format Format) {
+	formats[language] = format
+}
+
+
+// NewParser creates a new parser for the language
+func NewParser(language string) (*Parser, error) {
+    lang, ok := languages[language]
+	if !ok {
+		return nil, errors.New("No parser for this language.")
+	}
+
+	format, ok := formats[language] 
+	if !ok {
+		return nil, errors.New("No format for this language")
+	}
+
 	p := sitter.NewParser()
 	p.SetLanguage(lang)
 	parser := &Parser{
 		parser: p,
+		lang: lang,
+		format: &format,
 	}
 	return parser, nil
 }
+
+
 
 func (p *Parser) Parse(document []byte) error {
 	// Do a full parse of the document
@@ -56,14 +81,14 @@ func (p *Parser) Parse(document []byte) error {
 }
 
 // Query runs the provided query against the previously parsed tree, applying predicate filtering.
-func (p *Parser) Query(query []byte, document []byte) (map[string][]*sitter.Node, error) {
+func (p *Parser) query(query []byte, document []byte) (map[string][]*sitter.Node, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.tree == nil {
 		return nil, fmt.Errorf("no parsed tree available; first parse a document")
 	}
-	return executeQuery(p.tree.RootNode(), lang, query, document)
+	return executeQuery(p.tree.RootNode(), p.lang, query, document)
 }
 
 func (p *Parser) Update(edit sitter.EditInput) error {
@@ -93,59 +118,7 @@ func (p *Parser) Close() error {
 	return nil
 }
 
-// ParserPool maintains a pool of Parser instances for one-time parsing.
-type ParserPool struct {
-	pool chan *Parser
-	lang *sitter.Language
-}
 
-// NewParserPool creates a ParserPool with n Parser instances for the specified language.
-func NewParserPool(n int) *ParserPool {
-	pp := &ParserPool{
-		pool: make(chan *Parser, n),
-		lang: lang,
-	}
-	for range n {
-		parser, err := NewParser()
-		if err != nil {
-			panic(fmt.Sprintf("failed to create parser: %v", err))
-		}
-		pp.pool <- parser
-	}
-	return pp
-}
-
-// Parse performs a one-time parse of the document using one Parser from the pool.
-// It creates a new syntax tree from the document, runs the provided query (with predicate filtering)
-// and returns all matches.
-func (pp *ParserPool) ParseAndQuery(
-	document []byte,
-	query []byte,
-) (map[string][]*sitter.Node, error) {
-	// Acquire a parser from the pool.
-	p := <-pp.pool
-	defer func() { pp.pool <- p }()
-
-	tree, err := p.parser.ParseCtx(context.Background(), nil, document)
-	if err != nil {
-		return nil, err
-	}
-	// Update the Parser with the new tree and source.
-	p.mu.Lock()
-	p.tree = tree
-	p.mu.Unlock()
-
-	return executeQuery(tree.RootNode(), pp.lang, query, document)
-}
-
-// Close releases all Parser instances in the pool.
-func (pp *ParserPool) Close() error {
-	close(pp.pool)
-	for p := range pp.pool {
-		p.Close()
-	}
-	return nil
-}
 
 func executeQuery(
 	root *sitter.Node,

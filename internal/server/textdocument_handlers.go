@@ -15,11 +15,11 @@ func (s *Server) textDocumentDidOpen(
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if _, err := s.manager.EnsureParser(note.URI); err != nil {
+	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(params.TextDocument.Text))
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (s *Server) textDocumentDidChange(
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.TextDocumentIdentifier.URI)
-	s.manager.EnsureParser(note.URI)
+	s.manager.EnsureParser(note.URI, note.Format)
 	for _, raw := range params.ContentChanges {
 		change, ok := raw.(protocol.TextDocumentContentChangeEvent)
 		if !ok {
@@ -45,7 +45,7 @@ func (s *Server) textDocumentDidChange(
 			return fmt.Errorf("unexpected error during edit: %v", err)
 		}
 	}
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -61,11 +61,11 @@ func (s *Server) textDocumentDidSave(
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if _, err := s.manager.EnsureParser(note.URI); err != nil {
+	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(*params.Text))
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -114,10 +114,13 @@ func (s *Server) linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 		for _, r := range l.Ranges {
 			t := string(l.Target)
 			m, _ := s.cache.GetMetaData(t)
+			// TODO use proper title here
+			_ = m
 			d := protocol.Diagnostic{
 				Range:    r,
 				Severity: &severity,
-				Message:  "> " + resolver.Title(t, m),
+				// Message:  "> " + resolver.Title(t, m),
+				Message:  "> " + t,
 			}
 			diagnostics = append(diagnostics, d)
 		}

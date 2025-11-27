@@ -4,7 +4,7 @@ package parser
 #cgo CFLAGS: -std=c11 -fPIC
 
 extern void *tree_sitter_typst(void);
-extern void *tree_sitter_markdown(void);
+extern void *tree_sitter_mdlink(void);
 */
 import "C"
 
@@ -16,7 +16,7 @@ import (
 
 var (
 	typst = unsafe.Pointer(C.tree_sitter_typst())
-	markdown = unsafe.Pointer(C.tree_sitter_markdown())
+	markdown = unsafe.Pointer(C.tree_sitter_mdlink())
 )
 
 var languages = map[string]*sitter.Language{

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"time"
 	"zeta/internal/cache"
 	"zeta/internal/resolver"
@@ -14,7 +15,11 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	log.Println(note)
+	if err != nil {
+		return err
+	}
 	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
 		return err
 	}
@@ -35,7 +40,10 @@ func (s *Server) textDocumentDidChange(
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.TextDocumentIdentifier.URI)
-	s.manager.EnsureParser(note.URI, note.Format)
+	_, err := s.manager.EnsureParser(note.URI, note.Format)
+	if err != nil {
+		return err
+	}
 	for _, raw := range params.ContentChanges {
 		change, ok := raw.(protocol.TextDocumentContentChangeEvent)
 		if !ok {
@@ -114,13 +122,10 @@ func (s *Server) linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 		for _, r := range l.Ranges {
 			t := string(l.Target)
 			m, _ := s.cache.GetMetaData(t)
-			// TODO use proper title here
-			_ = m
 			d := protocol.Diagnostic{
 				Range:    r,
 				Severity: &severity,
-				// Message:  "> " + resolver.Title(t, m),
-				Message:  "> " + t,
+				Message:  "> " + m["DISPLAY_TITLE"],
 			}
 			diagnostics = append(diagnostics, d)
 		}

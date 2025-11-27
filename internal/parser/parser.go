@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
+	"runtime"
 	"sync"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -45,6 +47,7 @@ func AddFormat(language string, format Format) {
 
 // NewParser creates a new parser for the language
 func NewParser(language string) (*Parser, error) {
+	log.Printf("Creating new parser for %s", language)
     lang, ok := languages[language]
 	if !ok {
 		return nil, errors.New("No parser for this language.")
@@ -62,6 +65,10 @@ func NewParser(language string) (*Parser, error) {
 		lang: lang,
 		format: &format,
 	}
+
+	// I believe we should not need this, something is off
+	runtime.KeepAlive(lang)
+
 	return parser, nil
 }
 

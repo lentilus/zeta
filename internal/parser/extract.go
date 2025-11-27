@@ -12,28 +12,25 @@ import (
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-// TODO: make this compatible with parser module
-// maybe make a lot of things methods on parser objects.
+func (p *Parser) genTitle(path string, metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return path
+	}
+	var args []any
 
-// func Title(path string, metadata map[string]string) string {
-// 	if len(metadata) == 0 {
-// 		return path
-// 	}
-// 	var args []any
-//
-// 	for _, s := range titleSubstitutions {
-// 		v, ok := metadata[string(s)]
-// 		if ok {
-// 			args = append(args, v)
-// 		} else {
-// 			args = append(args, "")
-// 		}
-// 	}
-//
-// 	title := fmt.Sprintf(titleTemplate, args...)
-// 	title = strings.TrimSpace(title)
-// 	return title
-// }
+	for _, s := range p.format.TitleSubstitutions {
+		v, ok := metadata[string(s)]
+		if ok {
+			args = append(args, v)
+		} else {
+			args = append(args, "")
+		}
+	}
+
+	title := fmt.Sprintf(p.format.TitleTemplate, args...)
+	title = strings.TrimSpace(title)
+	return title
+}
 
 func (p *Parser)resolveReference(source resolver.Note, reference string) (resolver.Note, error) {
 	if len(reference) == 0 {
@@ -131,6 +128,9 @@ func (p *Parser)ExtractLinksAndMeta(
 			meta[k] = v[0].Content(document)
 		}
 	}
+
+	// NOTE: this would be nicer if it were not hardcoded
+	meta["DISPLAY_TITLE"] = p.genTitle(note.CachePath, meta)
 
 	return links, meta
 }

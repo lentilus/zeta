@@ -36,7 +36,6 @@ func (dm *DocumentManager) EnsureParser(uri string, language string) (*parser.Pa
 	}
 
 	p, err := parser.NewParser(language)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser for %s: %w", uri, err)
 	}

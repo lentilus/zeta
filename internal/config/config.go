@@ -16,7 +16,7 @@ type Config struct {
 }
 
 var defaultConfig = Config{
-	Root:               ".",
+	Root: ".",
 	Typst: parser.Format{
 	    Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
 	    SelectRegex:        `^"(.*)"$`,
@@ -25,8 +25,8 @@ var defaultConfig = Config{
 	    TitleSubstitutions: []string{"taxon", "title", "path"},
 	},
 	Markdown: parser.Format{
-	    Query:              `(call item: (ident) @link (#eq? @link "link") (group (string) @target ))`,
-	    SelectRegex:        `^"(.*)"$`,
+		Query:              `(link text: (label) @label destination: (destination) @target )`,
+	    SelectRegex:        `^(.*)$`,
 	    DefaultExtension:   ".md",
 	    TitleTemplate:      "%s %s %s",
 	    TitleSubstitutions: []string{"taxon", "title", "path"},

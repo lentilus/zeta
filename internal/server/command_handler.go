@@ -62,9 +62,7 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 
 	// noteToNode now uses note.Metadata directly, rather than fetching from cache
 	noteToNode := func(note cache.NoteEvent) graph.Node {
-		// TODO: proper name
-		// name := resolver.Title(note.Path, note.Metadata)
-		name := note.Path
+		name := note.Metadata["DISPLAY_TITLE"]
 		node := graph.Node{
 			Label:  name,
 			Grayed: note.Placeholder,
@@ -96,9 +94,7 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 
 			// Use note.Metadata provided by the UpdateNote event
 			updatedNode := graph.Node{
-				// TODO: proper title
-				// Label:  resolver.Title(ev.Note.Path, ev.Note.Metadata),
-				Label:  ev.Note.Path,
+				Label:  ev.Note.Metadata["DISPLAY_TITLE"],
 				Grayed: ev.Note.Placeholder,
 				ID:     id,
 			}

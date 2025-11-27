@@ -24,7 +24,9 @@ func (s *Server) indexNotes(context *glsp.Context) error {
 	cacheQueue := make(chan documentScan, 100)
 	embedQueue := make(chan documentScan, 100)
 
-	parsers := parser.NewParserPool(10, "typst")
+	// TODO!
+	// parsers := parser.NewParserPool(10, "markdown")
+	parsers := make(map[string]*parser.ParserPool)
 	seenNotes := map[cache.Path]struct{}{}
 	now := time.Now()
 
@@ -79,11 +81,19 @@ func (s *Server) indexNotes(context *glsp.Context) error {
 
 		// TODO: make this concurrent
 	    for d := range cacheQueue {
-			links, meta := parsers.ParseAndExtractLinksAndMeta(d.note, d.content)
+			format := d.note.Format
+			var pool *parser.ParserPool
+			if parsers[format] != nil {
+				pool = parsers[format]
+			} else {
+				pool = parser.NewParserPool(10, format)
+				parsers[format] = pool
+			}
+
+			links, meta := pool.ParseAndExtractLinksAndMeta(d.note, d.content)
 			if err := s.cache.SaveNote(d.note.CachePath, links, meta, now); err != nil {
 				log.Println(err)
 			}
-
 
 		    atomic.AddInt32(&cachedCount, 1)
 

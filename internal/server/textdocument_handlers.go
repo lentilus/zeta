@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"time"
 	"zeta/internal/cache"
 	"zeta/internal/resolver"
@@ -14,12 +15,16 @@ func (s *Server) textDocumentDidOpen(
 	context *glsp.Context,
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if _, err := s.manager.EnsureParser(note.URI); err != nil {
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	log.Println(note)
+	if err != nil {
+		return err
+	}
+	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(params.TextDocument.Text))
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -35,7 +40,10 @@ func (s *Server) textDocumentDidChange(
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.TextDocumentIdentifier.URI)
-	s.manager.EnsureParser(note.URI)
+	_, err := s.manager.EnsureParser(note.URI, note.Format)
+	if err != nil {
+		return err
+	}
 	for _, raw := range params.ContentChanges {
 		change, ok := raw.(protocol.TextDocumentContentChangeEvent)
 		if !ok {
@@ -45,7 +53,7 @@ func (s *Server) textDocumentDidChange(
 			return fmt.Errorf("unexpected error during edit: %v", err)
 		}
 	}
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -61,11 +69,11 @@ func (s *Server) textDocumentDidSave(
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
 	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if _, err := s.manager.EnsureParser(note.URI); err != nil {
+	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(*params.Text))
-	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
+	links, meta, err := s.manager.GetLinksAndMeta(note)
 	if err != nil {
 		return err
 	}
@@ -117,7 +125,7 @@ func (s *Server) linkDiagnostics(links []cache.Link) []protocol.Diagnostic {
 			d := protocol.Diagnostic{
 				Range:    r,
 				Severity: &severity,
-				Message:  "> " + resolver.Title(t, m),
+				Message:  "> " + m["DISPLAY_TITLE"],
 			}
 			diagnostics = append(diagnostics, d)
 		}

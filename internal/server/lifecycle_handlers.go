@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"net/url"
 	"os"
@@ -17,7 +17,6 @@ import (
 	"zeta/internal/manager"
 	"zeta/internal/parser"
 	"zeta/internal/resolver"
-	"zeta/internal/scanner"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -32,34 +31,64 @@ func (s *Server) initialize(
 		return nil, err
 	}
 
-	s.config = config
-	log.Printf("Config: %v", config)
+	// TODO: document that we are overriding config root here
+	if params.RootURI == nil {
+		return nil, errors.New("No Root given")
+	}
 
-	// Root
-	rootUri, _ := url.Parse(*params.RootURI)
-	resolver.Configure(
-		rootUri.Path,
-		config.SelectRegex,
-		config.FileExtensions,
-		config.DefaultExtension,
-		config.TitleTemplate,
-		config.TitleSubstitutions,
-	)
 
-	// Cache File
-	stateBaseDir, _ := getXDGStateHome("zeta")
-	hash := sha256.New()
-	b, err := json.Marshal(config)
+	rootUri, err := url.Parse(*params.RootURI)
 	if err != nil {
 		return nil, err
 	}
+	config.Root = rootUri.Path
+
+	parser.AddFormat("typst", config.Typst)
+	parser.AddFormat("markdown", config.Markdown)
+
+	s.config = config
+
+	log.Printf("Config: %v", s.config)
+
+	err = resolver.Configure(config.Root, config.Extensions)
+	if err != nil {
+		return nil, err
+	}
+
+	syncKind := protocol.TextDocumentSyncKindIncremental
+
+	capabilities := s.handler.CreateServerCapabilities()
+	capabilities.TextDocumentSync = &protocol.TextDocumentSyncOptions{
+		OpenClose: &protocol.True,
+		Change:    &syncKind,
+		Save:      &protocol.SaveOptions{IncludeText: &protocol.True},
+	}
+
+	return protocol.InitializeResult{
+		Capabilities: capabilities,
+	}, nil
+}
+
+func (s *Server) initialized(
+	context *glsp.Context,
+	params *protocol.InitializedParams,
+) error {
+	// Cache File
+	stateBaseDir, _ := getXDGStateHome("zeta")
+	hash := sha256.New()
+	b, err := json.Marshal(s.config)
+	if err != nil {
+		return err
+	}
 	hash.Write([]byte(b))
 	configHash := hex.EncodeToString(hash.Sum(nil))
-	cacheDir := path.Join(stateBaseDir, url.PathEscape(rootUri.Path), configHash)
+	cacheDir := path.Join(stateBaseDir, url.PathEscape(s.config.Root), configHash)
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
-		return "", fmt.Errorf("failed to create state directory: %w", err)
+		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 	cacheFile := path.Join(cacheDir, "cache.json")
+
+	s.manager = manager.NewDocumentManager()
 
 	// Restore from cache.
 	dump, err := os.ReadFile(cacheFile)
@@ -72,55 +101,11 @@ func (s *Server) initialize(
 		}
 	}
 
-	// Document Manager
-	s.manager = manager.NewDocumentManager()
-
-	// Parsers
-	parsers := parser.NewParserPool(10)
-
-	// Note directory scanning + cache validation.
-	seenNotes := map[cache.Path]struct{}{}
-	skip := func(absolutepath string, info fs.FileInfo) bool {
-		note, err := resolver.Resolve(absolutepath)
-		if err != nil {
-			return true
-		}
-		seenNotes[note.CachePath] = struct{}{}
-		lastSeen := s.cache.GetSaveTime(note.CachePath)
-
-		hasNotChanged := lastSeen.After(info.ModTime())
-		if !hasNotChanged {
-			log.Printf("Note %s was was changed", absolutepath)
-		}
-		return hasNotChanged
+	log.Println("Starting indexing")
+	err = s.indexNotes(context)
+	if err != nil {
+	    return err
 	}
-	now := time.Now()
-
-	callback := func(absolutepath string, document []byte) {
-		note, err := resolver.Resolve(absolutepath)
-		if err != nil {
-			log.Printf("Unexpected error resolving %v", err)
-		}
-		nodes, err := parsers.ParseAndQuery(document, []byte(s.config.Query))
-		if err != nil {
-			log.Printf("Unexpected error parsing %v", err)
-		}
-		links, meta := resolver.ExtractLinksAndMeta(note, nodes, document)
-		err = s.cache.SaveNote(note.CachePath, links, meta, now)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	go func() {
-		scanner.Scan(rootUri.Path, skip, callback)
-		notes := s.cache.GetPaths()
-		for _, note := range notes {
-			if _, ok := seenNotes[note]; !ok {
-				s.cache.DeleteNote(note)
-			}
-		}
-	}()
 
 	// Start cache dump routine.
 	ticker := time.NewTicker(5 * time.Minute)
@@ -134,30 +119,6 @@ func (s *Server) initialize(
 			}
 		}
 	}()
-
-	syncKind := protocol.TextDocumentSyncKindIncremental
-
-	capabilities := s.handler.CreateServerCapabilities()
-	capabilities.TextDocumentSync = &protocol.TextDocumentSyncOptions{
-		OpenClose: &protocol.True,
-		Change:    &syncKind,
-		Save:      &protocol.SaveOptions{IncludeText: &protocol.True},
-	}
-
-	return protocol.InitializeResult{
-		Capabilities: capabilities,
-		ServerInfo: &protocol.InitializeResultServerInfo{
-			Name:    "zeta",
-			Version: &s.version,
-		},
-	}, nil
-}
-
-func (s *Server) initialized(
-	context *glsp.Context,
-	params *protocol.InitializedParams,
-) error {
-	log.Println("Client initialized.")
 	return nil
 }
 
@@ -175,7 +136,6 @@ func getXDGStateHome(appName string) (string, error) {
 		xdgStateHome = filepath.Join(homeDir, ".local", "state")
 	}
 
-	// Final path for your app
 	appStateDir := filepath.Join(xdgStateHome, appName)
 
 	// Create it if it doesn't exist

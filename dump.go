@@ -23,30 +23,45 @@ func runDump(configPath string) error {
 		return err
 	}
 
-	resolver.Configure(
-		cfg.Root,
-		cfg.SelectRegex,
-		cfg.FileExtensions,
-		cfg.DefaultExtension,
-		cfg.TitleTemplate,
-		cfg.TitleSubstitutions,
-	)
+	resolver.Configure(cfg.Root, cfg.Extensions)
 
 	c := cache.NewCache()
 	now := time.Now()
-	skip := func(path string, info fs.FileInfo) bool {
-		return false // always re-scan for dump
+
+	langSet := make(map[string]bool)
+	for _, lang := range cfg.Extensions {
+		langSet[lang] = true
 	}
-	parserPool := parser.NewParserPool(10)
+	parserPools := make(map[string]*parser.ParserPool, len(langSet))
+	for lang := range langSet {
+		parserPools[lang] = parser.NewParserPool(10, lang)
+	}
+	defer func() {
+		for _, pool := range parserPools {
+			pool.Close()
+		}
+	}()
+
+	skip := func(path string, info fs.FileInfo) bool {
+		return false // always re‑scan when dumping
+	}
+
 	callback := func(path string, data []byte) {
 		note, err := resolver.Resolve(path)
 		if err != nil {
 			return
 		}
-		matches, _ := parserPool.ParseAndQuery(data, []byte(cfg.Query))
-		links, meta := resolver.ExtractLinksAndMeta(note, matches, data)
-		_ = c.SaveNote(note.CachePath, links, meta, now)
+		pool, ok := parserPools[note.Format]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "no parser pool for format %s of note %s\n", note.Format, note.AbsolutePath)
+			return
+		}
+		links, meta := pool.ParseAndExtractLinksAndMeta(note, data)
+		if err := c.SaveNote(note.CachePath, links, meta, now); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to save note %s: %v\n", note.CachePath, err)
+		}
 	}
+
 	scanner.Scan(cfg.Root, skip, callback)
 	fmt.Print(string(c.Dump()))
 	return nil

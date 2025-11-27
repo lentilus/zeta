@@ -1,0 +1,4 @@
+# this file tells telescope to ignore these vendored files
+./vendor
+./grammars
+

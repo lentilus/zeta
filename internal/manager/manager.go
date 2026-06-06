@@ -87,6 +87,20 @@ func (dm *DocumentManager) ApplyIncrementalEdit(
 	return nil
 }
 
+// ReplaceDocument replaces the whole document for a URI and resets the
+// parser's syntax tree, forcing a fresh parse. This is used for full-document
+// change events (a TextDocumentContentChangeEvent without a range).
+func (dm *DocumentManager) ReplaceDocument(uri string, content []byte) error {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	dm.docs[uri] = content
+	if p, ok := dm.parsers[uri]; ok && p != nil {
+		p.Reset()
+	}
+	return nil
+}
+
 // GetLinks runs the full parse → query → extract pipeline.
 func (dm *DocumentManager) GetLinksAndMeta(
 	note resolver.Note,

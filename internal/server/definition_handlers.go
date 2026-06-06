@@ -1,8 +1,10 @@
 package server
 
 import (
+	"os"
 	"strings"
 	"zeta/internal/resolver"
+	"zeta/internal/sitteradapter"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -12,7 +14,10 @@ func (s *Server) textDocumentDefinition(
 	context *glsp.Context,
 	params *protocol.DefinitionParams,
 ) (any, error) {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	if err != nil {
+		return nil, nil
+	}
 
 	refs, err := s.cache.GetForwardLinks(note.CachePath)
 	if err != nil {
@@ -29,35 +34,69 @@ func (s *Server) textDocumentDefinition(
 			index := params.TextDocumentPositionParams.Position.IndexIn(string(doc))
 
 			if index >= indexFrom && index <= indexTo {
-				target, _ := resolver.Resolve(ref.Target)
-				if s.cache.NoteExists(target.RelativePath) {
-					return protocol.Location{
-						URI: target.URI,
-						Range: protocol.Range{
-							Start: protocol.Position{Line: 0, Character: 0},
-							End:   protocol.Position{Line: 0, Character: 0},
-						},
-					}, nil
+				target, err := resolver.Resolve(ref.Target)
+				if err != nil {
+					return nil, nil
 				}
-				context.Notify(
-					"window/showDocument",
-					protocol.ShowDocumentParams{
-						URI:      protocol.URI(target.URI),
-						External: &protocol.False,
-					},
-				)
-				return nil, nil
+				// Per the LSP spec the result is `Location | Location[] |
+				// LocationLink[] | null`. We always return a Location pointing
+				// at the target note: the editor opens it whether or not the
+				// file already exists (placeholder notes are created on save).
+				// Returning the result directly is the idiomatic answer to a
+				// definition request, rather than side-effecting via a separate
+				// `window/showDocument` request from inside this handler.
+				return protocol.Location{
+					URI:   target.URI,
+					Range: s.definitionRange(target),
+				}, nil
 			}
 		}
 	}
 	return nil, nil
 }
 
+// definitionRange locates the position of a note's title within the target
+// document so goto-definition lands on the heading rather than the top of the
+// file. It reads the open buffer if available, otherwise the file on disk, and
+// falls back to the start of the file (0:0) for placeholder notes or when no
+// title capture is present.
+func (s *Server) definitionRange(target resolver.Note) protocol.Range {
+	zero := protocol.Range{
+		Start: protocol.Position{Line: 0, Character: 0},
+		End:   protocol.Position{Line: 0, Character: 0},
+	}
+
+	// Prefer the in-memory document (unsaved edits); fall back to disk.
+	content, err := s.manager.GetDocument(target.URI)
+	if err != nil {
+		content, err = os.ReadFile(target.AbsolutePath)
+		if err != nil {
+			// File does not exist yet (placeholder) or is unreadable.
+			return zero
+		}
+	}
+
+	nodes, err := s.parsers.ParseAndQuery(content, []byte(s.config.Query))
+	if err != nil {
+		return zero
+	}
+	node := resolver.DefinitionNode(nodes)
+	if node == nil {
+		return zero
+	}
+
+	pos := sitteradapter.TSPointToLSPPosition((*node).StartPoint(), string(content))
+	return protocol.Range{Start: pos, End: pos}
+}
+
 func (s *Server) textDocumentReferences(
 	context *glsp.Context,
 	params *protocol.ReferenceParams,
 ) ([]protocol.Location, error) {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	if err != nil {
+		return nil, nil
+	}
 
 	refs, err := s.cache.GetBackLinks(note.CachePath)
 	if err != nil {

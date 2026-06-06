@@ -14,8 +14,11 @@ func (s *Server) workspaceExecuteCommand(
 	context *glsp.Context,
 	params *protocol.ExecuteCommandParams,
 ) (any, error) {
-	if params.Command == "graph" {
+	switch params.Command {
+	case "graph":
 		return nil, s.graph(context)
+	case "createNote":
+		return nil, s.createNote(params.Arguments)
 	}
 	return nil, nil
 }
@@ -27,13 +30,30 @@ func (s *Server) graph(ctx *glsp.Context) error {
 		s.graphAddr = graph.ShowGraph(":0")
 		reuse = false
 	}
-	ctx.Notify(
-		"window/showDocument",
-		protocol.ShowDocumentParams{
-			URI:      protocol.URI(s.graphAddr),
-			External: &protocol.True,
-		},
-	)
+
+	// `window/showDocument` is a server->client request (not a notification)
+	// and is only valid if the client advertised support for it via the
+	// `window.showDocument` capability. Clients that support it (e.g. Helix,
+	// VS Code) open the graph URL externally; others get it via a log message.
+	if s.supportsShowDocument {
+		var result protocol.ShowDocumentResult
+		ctx.Call(
+			protocol.ServerWindowShowDocument,
+			protocol.ShowDocumentParams{
+				URI:      protocol.URI(s.graphAddr),
+				External: &protocol.True,
+			},
+			&result,
+		)
+	} else {
+		ctx.Notify(
+			protocol.ServerWindowLogMessage,
+			protocol.LogMessageParams{
+				Type:    protocol.MessageTypeInfo,
+				Message: "zeta graph available at " + s.graphAddr,
+			},
+		)
+	}
 
 	if reuse {
 		return nil

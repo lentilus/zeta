@@ -131,6 +131,9 @@ func (p *Parser)ExtractLinksAndMeta(
 
 	// NOTE: this would be nicer if it were not hardcoded
 	meta["DISPLAY_TITLE"] = p.genTitle(note.CachePath, meta)
+	// TODO: this is what we will use to put into the body of
+	// references generated on auto-completion 
+	meta["REFERENCE_TITLE"] = p.genTitle(note.CachePath, meta)
 
 	return links, meta
 }

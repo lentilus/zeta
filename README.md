@@ -101,7 +101,34 @@ defaults = {
   -- This is especially important for zeta to be able to detect notes not opened in
   -- the editor.
   file_extensions = {".typ"},
+
+  -- Link-target completion lets you search notes by title and inserts the
+  -- (arbitrary) filename for you, so you link concepts, not filenames.
+  -- When true, accepting a completion also fills an empty/absent display
+  -- body, e.g. #link("d654bf")[Axiom of Choice]. Existing bodies are kept.
+  -- Set to false if your links/query do not use a display body.
+  completion_insert_display = true,
+
+  -- How the filename is generated when you create a note from a link:
+  --   "random"    -> opaque short id, e.g. a1b2c3.typ (default)
+  --   "timestamp" -> e.g. 20260606T153012.typ
+  --   "slug"      -> derived from the title, e.g. axiom-of-choice.typ
+  new_note_id_scheme = "random",
+
+  -- Content written to a newly created note; %s is the title.
+  new_note_template = "= %s\n",
+
+  -- Optional external command used to create notes instead of the template
+  -- (lets an external system enforce its own formatting/naming). The
+  -- placeholders {title}, {path}, {id} and {root} are substituted. Empty
+  -- means use new_note_template.
+  new_note_command = "",
 }
 ```
+
+> Note creation (the "Create note" completion item and the `createNote`
+> code action) materializes the file on clients that run completion-item
+> commands (e.g. Neovim) or via the code action (e.g. Helix). Otherwise the
+> file is created the first time you navigate to the link and save.
 ## Contribute
 Contributions are very welcome!

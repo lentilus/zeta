@@ -118,6 +118,18 @@ func (p *Parser) Update(edit sitter.EditInput) error {
 	return nil
 }
 
+// Reset discards the current syntax tree so the next Parse starts from
+// scratch. Use this when the document is replaced wholesale (e.g. a
+// full-document change event) and incremental edits no longer apply.
+func (p *Parser) Reset() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.tree != nil {
+		p.tree.Close()
+		p.tree = nil
+	}
+}
+
 // Close frees any resources held by the Parser.
 func (p *Parser) Close() error {
 	p.mu.Lock()

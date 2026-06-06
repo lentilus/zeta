@@ -96,3 +96,47 @@ func resolveAbsolute(absolutepath string) (Note, error) {
 		Format: format,
 	}, nil
 }
+
+//
+// TODO: this will depend on the format of the source note, so most of the below should probabably move into parser
+//
+
+// Reference returns the string to write inside a link so that it resolves back
+// to the note at relativePath. The default extension is stripped (it is
+// re-appended during resolution), yielding clean targets like "sub/d654bf".
+func Reference(relativePath string, soureFormat string) string {
+	ext := filepath.Ext(relativePath)
+	if ext == defaultExtension {
+		return strings.TrimSuffix(relativePath, ext)
+	}
+	return relativePath
+}
+
+// DefinitionNode returns the captured node that best represents a note's
+// "definition": the earliest-positioned capture among the configured title
+// substitutions (typically the heading/title). It returns nil if the document
+// contains none of them, in which case callers fall back to the top of the
+// file.
+func DefinitionNode(namedNodes map[string][]*sitter.Node) *sitter.Node {
+	var best *sitter.Node
+	for _, key := range titleSubstitutions {
+		nodes := namedNodes[key]
+		if len(nodes) == 0 {
+			continue
+		}
+		n := nodes[0]
+		if best == nil || startsBefore(n, best) {
+			best = n
+		}
+	}
+	return best
+}
+
+// startsBefore reports whether node a starts earlier in the document than b.
+func startsBefore(a, b *sitter.Node) bool {
+	ap, bp := (*a).StartPoint(), (*b).StartPoint()
+	if ap.Row != bp.Row {
+		return ap.Row < bp.Row
+	}
+	return ap.Column < bp.Column
+}

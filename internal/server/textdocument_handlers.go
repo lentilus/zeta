@@ -16,11 +16,11 @@ func (s *Server) textDocumentDidOpen(
 	params *protocol.DidOpenTextDocumentParams,
 ) error {
 	note, err := resolver.Resolve(params.TextDocument.URI)
-	log.Println(note)
 	if err != nil {
-		return err
+		// Not a note we manage (e.g. unsupported extension); ignore quietly.
+		return nil
 	}
-	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
+	if _, err := s.manager.EnsureParser(note.URI); err != nil {
 		return err
 	}
 	s.manager.UpdateDocument(note.URI, []byte(params.TextDocument.Text))
@@ -31,7 +31,9 @@ func (s *Server) textDocumentDidOpen(
 	if err := s.cache.EditNote(note.RelativePath, links, meta); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
+	// Publish against the exact URI the client sent so it can associate the
+	// diagnostics with its buffer (clients match by literal URI string).
+	publishDiagnostics(context, params.TextDocument.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -39,18 +41,29 @@ func (s *Server) textDocumentDidChange(
 	context *glsp.Context,
 	params *protocol.DidChangeTextDocumentParams,
 ) error {
-	note, _ := resolver.Resolve(params.TextDocument.TextDocumentIdentifier.URI)
-	_, err := s.manager.EnsureParser(note.URI, note.Format)
+	note, err := resolver.Resolve(params.TextDocument.TextDocumentIdentifier.URI)
 	if err != nil {
+		return nil
+	}
+	if _, err := s.manager.EnsureParser(note.URI); err != nil {
 		return err
 	}
+	// Per the LSP spec, a content change with a range is an incremental edit,
+	// while one without a range (delivered as TextDocumentContentChangeEventWhole)
+	// replaces the entire document. Both forms are valid even under incremental
+	// sync, so we must handle each.
 	for _, raw := range params.ContentChanges {
-		change, ok := raw.(protocol.TextDocumentContentChangeEvent)
-		if !ok {
+		switch change := raw.(type) {
+		case protocol.TextDocumentContentChangeEvent:
+			if err := s.manager.ApplyIncrementalEdit(note.URI, change); err != nil {
+				return fmt.Errorf("unexpected error during edit: %v", err)
+			}
+		case protocol.TextDocumentContentChangeEventWhole:
+			if err := s.manager.ReplaceDocument(note.URI, []byte(change.Text)); err != nil {
+				return fmt.Errorf("unexpected error during full update: %v", err)
+			}
+		default:
 			return fmt.Errorf("unexpected change event type %T", raw)
-		}
-		if err := s.manager.ApplyIncrementalEdit(note.URI, change); err != nil {
-			return fmt.Errorf("unexpected error during edit: %v", err)
 		}
 	}
 	links, meta, err := s.manager.GetLinksAndMeta(note)
@@ -60,7 +73,7 @@ func (s *Server) textDocumentDidChange(
 	if err := s.cache.EditNote(note.RelativePath, links, meta); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
+	publishDiagnostics(context, params.TextDocument.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -68,19 +81,27 @@ func (s *Server) textDocumentDidSave(
 	context *glsp.Context,
 	params *protocol.DidSaveTextDocumentParams,
 ) error {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
-	if _, err := s.manager.EnsureParser(note.URI, note.Format); err != nil {
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	if err != nil {
+		return nil
+	}
+	if _, err := s.manager.EnsureParser(note.URI); err != nil {
 		return err
 	}
-	s.manager.UpdateDocument(note.URI, []byte(*params.Text))
-	links, meta, err := s.manager.GetLinksAndMeta(note)
+	// `text` is only present when the client honors `save.includeText`. Update
+	// the stored document from it when available; otherwise keep the version
+	// already maintained via didChange events.
+	if params.Text != nil {
+		s.manager.UpdateDocument(note.URI, []byte(*params.Text))
+	}
+	links, meta, err := s.manager.GetLinksAndMeta(note.URI, s.config.Query)
 	if err != nil {
 		return err
 	}
 	if err := s.cache.SaveNote(note.RelativePath, links, meta, time.Now()); err != nil {
 		return err
 	}
-	publishDiagnostics(context, note.URI, s.linkDiagnostics(links))
+	publishDiagnostics(context, params.TextDocument.URI, s.linkDiagnostics(links))
 	return nil
 }
 
@@ -88,7 +109,10 @@ func (s *Server) textDocumentDidClose(
 	context *glsp.Context,
 	params *protocol.DidCloseTextDocumentParams,
 ) error {
-	note, _ := resolver.Resolve(params.TextDocument.URI)
+	note, err := resolver.Resolve(params.TextDocument.URI)
+	if err != nil {
+		return nil
+	}
 	if err := s.cache.DiscardNote(note.RelativePath); err != nil {
 		return err
 	}

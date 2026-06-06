@@ -36,6 +36,30 @@ func (s *Server) initialize(
 		return nil, errors.New("No Root given")
 	}
 
+	// Record optional client capabilities.
+	if w := params.Capabilities.Window; w != nil && w.ShowDocument != nil {
+		s.supportsShowDocument = w.ShowDocument.Support
+	}
+
+	// Determine the workspace root. `rootUri` is deprecated and may be null
+	// (per the LSP spec), so fall back to the first workspace folder and
+	// finally to the (also deprecated) rootPath before giving up.
+	rootURIString, err := workspaceRoot(params)
+	if err != nil {
+		return nil, err
+	}
+	rootUri, err := url.Parse(rootURIString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid workspace root URI %q: %w", rootURIString, err)
+	}
+	resolver.Configure(
+		rootUri.Path,
+		config.SelectRegex,
+		config.FileExtensions,
+		config.DefaultExtension,
+		config.TitleTemplate,
+		config.TitleSubstitutions,
+	)
 
 	rootUri, err := url.Parse(*params.RootURI)
 	if err != nil {
@@ -62,6 +86,15 @@ func (s *Server) initialize(
 		OpenClose: &protocol.True,
 		Change:    &syncKind,
 		Save:      &protocol.SaveOptions{IncludeText: &protocol.True},
+	}
+	// The LSP spec requires `ExecuteCommandOptions.commands` to enumerate the
+	// commands the server handles, so clients know which are available.
+	capabilities.ExecuteCommandProvider = &protocol.ExecuteCommandOptions{
+		Commands: []string{"graph", "createNote"},
+	}
+	// Offer link-target completion; `"` triggers it inside `#link("…")`.
+	capabilities.CompletionProvider = &protocol.CompletionOptions{
+		TriggerCharacters: []string{"\""},
 	}
 
 	return protocol.InitializeResult{
@@ -124,6 +157,23 @@ func (s *Server) initialized(
 
 func (s *Server) shutdown(context *glsp.Context) error {
 	return nil
+}
+
+// workspaceRoot resolves the workspace root URI from the initialize params.
+// `rootUri` is preferred but is deprecated and may be null, so we fall back to
+// the first workspace folder and then to the (also deprecated) `rootPath`.
+func workspaceRoot(params *protocol.InitializeParams) (string, error) {
+	if params.RootURI != nil && *params.RootURI != "" {
+		return string(*params.RootURI), nil
+	}
+	if len(params.WorkspaceFolders) > 0 && params.WorkspaceFolders[0].URI != "" {
+		return string(params.WorkspaceFolders[0].URI), nil
+	}
+	if params.RootPath != nil && *params.RootPath != "" {
+		u := url.URL{Scheme: "file", Path: *params.RootPath}
+		return u.String(), nil
+	}
+	return "", fmt.Errorf("no workspace root provided: rootUri, workspaceFolders and rootPath are all empty")
 }
 
 func getXDGStateHome(appName string) (string, error) {

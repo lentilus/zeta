@@ -35,6 +35,8 @@ func newTestServer(t *testing.T, root string) *Server {
 			Query:                   demoQuery,
 			DefaultExtension:        ".typ",
 			CompletionInsertDisplay: true,
+			SuggestLinksInText:      true,
+			LinkSuggestThreshold:    0.7,
 			DisplayTemplate:         "%s",
 			DisplaySubstitutions:    []string{"title"},
 			NewNoteIDScheme:         "random",
@@ -179,6 +181,98 @@ func TestCompletionOffersCreateForUnknownConcept(t *testing.T) {
 	got := applyEdit(src, create.TextEdit.(protocol.TextEdit))
 	if !strings.HasSuffix(got, "[quantum]\n") || !strings.HasPrefix(got, "#link(\"") {
 		t.Errorf("applied create = %q, want #link(\"<id>\")[quantum]", got)
+	}
+}
+
+// TestProseLinkSuggestion checks that while writing ordinary text, a trailing
+// phrase matching a note title is suggested as a link (and the whole phrase is
+// replaced, not just the last word).
+func TestProseLinkSuggestion(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("axiom.typ", nil, map[string]string{"title": "Axiom of Choice"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "We use the axiom of choi"
+	uri := openDoc(t, s, root, "source.typ", src)
+	items := complete(t, s, uri, 0, uint32(len(src)))
+
+	it := itemByLabel(items, "Axiom of Choice")
+	if it == nil {
+		t.Fatalf("expected an 'Axiom of Choice' suggestion, got %d items", len(items))
+	}
+	got := applyEdit(src, it.TextEdit.(protocol.TextEdit))
+	if want := "We use the #link(\"axiom\")[Axiom of Choice]"; got != want {
+		t.Errorf("applied = %q, want %q", got, want)
+	}
+}
+
+// TestProseFuzzyMatchToleratesTypo ensures a phrase with a typo still matches a
+// title closely enough to be suggested.
+func TestProseFuzzyMatchToleratesTypo(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("axiom.typ", nil, map[string]string{"title": "Axiom of Choice"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "axiom of choise" // typo: choise -> choice
+	uri := openDoc(t, s, root, "source.typ", src)
+	items := complete(t, s, uri, 0, uint32(len(src)))
+
+	it := itemByLabel(items, "Axiom of Choice")
+	if it == nil {
+		t.Fatalf("expected a fuzzy 'Axiom of Choice' suggestion despite the typo")
+	}
+	got := applyEdit(src, it.TextEdit.(protocol.TextEdit))
+	if want := "#link(\"axiom\")[Axiom of Choice]"; got != want {
+		t.Errorf("applied = %q, want %q", got, want)
+	}
+}
+
+// TestProseThresholdGatesLooseMatch ensures a far-off phrase is suppressed at
+// the default threshold.
+func TestProseThresholdGatesLooseMatch(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("axiom.typ", nil, map[string]string{"title": "Axiom of Choice"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "axiomatic"
+	uri := openDoc(t, s, root, "source.typ", src)
+	if items := complete(t, s, uri, 0, uint32(len(src))); itemByLabel(items, "Axiom of Choice") != nil {
+		t.Errorf("did not expect 'axiomatic' to match 'Axiom of Choice' above threshold")
+	}
+}
+
+// TestProseNoSuggestionMidWord ensures a phrase matching only inside a word does
+// not trigger a suggestion.
+func TestProseNoSuggestionMidWord(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("set.typ", nil, map[string]string{"title": "Set"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "the offset"
+	uri := openDoc(t, s, root, "source.typ", src)
+	if items := complete(t, s, uri, 0, uint32(len(src))); itemByLabel(items, "Set") != nil {
+		t.Errorf("did not expect a 'Set' suggestion inside the word 'offset'")
+	}
+}
+
+// TestProseNoSuggestionInLinkBody ensures prose suggestions are suppressed
+// while editing an existing link's display body.
+func TestProseNoSuggestionInLinkBody(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("axiom.typ", nil, map[string]string{"title": "Axiom of Choice"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "#link(\"x\")[axiom of choi]\n"
+	uri := openDoc(t, s, root, "source.typ", src)
+	// cursor right before the closing ']'
+	items := complete(t, s, uri, 0, uint32(strings.Index(src, "]")))
+	if itemByLabel(items, "Axiom of Choice") != nil {
+		t.Errorf("did not expect a prose suggestion inside a link body")
 	}
 }
 

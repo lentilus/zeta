@@ -102,6 +102,16 @@ defaults = {
   -- the editor.
   file_extensions = {".typ"},
 
+  -- While writing ordinary text, suggest turning the phrase you are typing
+  -- into a link when it fuzzily matches an existing note's title (the whole
+  -- phrase is replaced with #link("id")[Title]). Set false to disable.
+  suggest_links_in_text = true,
+
+  -- Minimum fuzzy closeness (0..1) for a prose suggestion to appear. A clean
+  -- (even partial) prefix scores 1.0; typos lower it. Raise to get fewer
+  -- suggestions, lower for looser matching.
+  link_suggest_threshold = 0.7,
+
   -- Link-target completion lets you search notes by title and inserts the
   -- (arbitrary) filename for you, so you link concepts, not filenames.
   -- When true, accepting a completion also fills an empty/absent display

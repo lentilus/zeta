@@ -2,6 +2,7 @@ package server
 
 import (
 	"strings"
+	"unicode/utf8"
 	"zeta/internal/resolver"
 	"zeta/internal/sitteradapter"
 
@@ -34,11 +35,38 @@ func (s *Server) textDocumentCompletion(
 	}
 
 	cursorIdx := params.Position.IndexIn(src)
-	target := targetAt(nodes["target"], cursorIdx)
-	if target == nil {
-		return nil, nil // not inside a link target
+	if target := targetAt(nodes["target"], cursorIdx); target != nil {
+		return s.linkTargetCompletions(note, src, target)
 	}
+	// Outside a link: suggest turning the phrase being typed into a link to an
+	// existing note whose title it matches. Skip when editing an existing
+	// link's display body, where a nested-link suggestion would be unwanted.
+	if s.config.SuggestLinksInText && !cursorInLinkBody(nodes["target"], cursorIdx) {
+		return s.proseLinkCompletions(note.CachePath, src, params.Position, cursorIdx)
+	}
+	return nil, nil
+}
 
+// cursorInLinkBody reports whether the cursor sits within the display body
+// ("[...]") of any link.
+func cursorInLinkBody(targets []*sitter.Node, cursorIdx int) bool {
+	for _, n := range targets {
+		linkCall := enclosingCall(n)
+		if linkCall == nil {
+			continue
+		}
+		if body := bodyOf(linkCall); body != nil {
+			if cursorIdx >= int(body.StartByte()) && cursorIdx <= int(body.EndByte()) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// linkTargetCompletions offers existing notes (searchable by title) plus a
+// "create note" item while the cursor is inside a link target.
+func (s *Server) linkTargetCompletions(note resolver.Note, src string, target *sitter.Node) (any, error) {
 	// plan describes the single text edit each item performs. The display body
 	// is folded into this one edit (rather than additionalTextEdits) because
 	// some clients (Helix) apply additional edits against the post-edit buffer
@@ -115,6 +143,150 @@ func (s *Server) textDocumentCompletion(
 	// IsIncomplete asks the client to recompute as the user keeps typing, so the
 	// title filter and the "create" item stay current rather than frozen.
 	return protocol.CompletionList{IsIncomplete: true, Items: items}, nil
+}
+
+// minPhraseMatch is the shortest matched phrase length that triggers a prose
+// link suggestion, to avoid noise on one- or two-letter fragments.
+const minPhraseMatch = 3
+
+// proseLinkCompletions suggests linking the phrase being typed to an existing
+// note when a trailing run of the current line matches the start of its title.
+// Accepting replaces the phrase with a full `#link("id")[Title]`.
+func (s *Server) proseLinkCompletions(self string, src string, pos protocol.Position, cursorIdx int) (any, error) {
+	lineStart := cursorIdx
+	for lineStart > 0 && src[lineStart-1] != '\n' {
+		lineStart--
+	}
+	line := src[lineStart:cursorIdx]
+
+	refKind := protocol.CompletionItemKindReference
+	snippetFormat := protocol.InsertTextFormatSnippet
+	items := []protocol.CompletionItem{}
+	count := 0
+	for _, p := range s.cache.GetPaths() {
+		if p == self {
+			continue
+		}
+		meta, _ := s.cache.GetMetaData(p)
+		title := resolver.Title(p, meta)
+		n, score := bestLinkWindow(line, title)
+		if n == 0 || score < s.config.LinkSuggestThreshold {
+			continue
+		}
+		startCol := uint32(len(line) - n) // byte column of the match within the line
+		start := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: pos.Line, Column: startCol}, src)
+
+		newText, isSnippet := s.linkInsert(resolver.Reference(p), resolver.Display(p, meta))
+		detail := "link " + p
+		item := protocol.CompletionItem{
+			Label:      title,
+			Kind:       &refKind,
+			Detail:     &detail,
+			FilterText: &title,
+			TextEdit:   protocol.TextEdit{Range: protocol.Range{Start: start, End: pos}, NewText: newText},
+		}
+		if isSnippet {
+			item.InsertTextFormat = &snippetFormat
+		}
+		items = append(items, item)
+		if count++; count >= 50 {
+			break
+		}
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	return protocol.CompletionList{IsIncomplete: true, Items: items}, nil
+}
+
+// linkInsert builds the text that wraps a reference and display title in a link,
+// using a selectable snippet placeholder for the body when the client supports
+// snippets.
+func (s *Server) linkInsert(ref, display string) (string, bool) {
+	if s.supportsSnippets {
+		return `#link("` + snippetEscape(ref) + `")[${1:` + snippetEscape(display) + `}]`, true
+	}
+	return `#link("` + ref + `")[` + display + `]`, false
+}
+
+// bestLinkWindow finds the trailing window of line (beginning at a word
+// boundary) that best fuzzy-matches the start of title. It returns the window's
+// byte length and its similarity score in [0,1]. n is 0 when no window of at
+// least minPhraseMatch characters exists. Only windows up to roughly the title
+// length are considered, since longer ones can never score well.
+func bestLinkWindow(line, title string) (n int, score float64) {
+	titleLower := []rune(strings.ToLower(title))
+	lo := len(line) - (len(title) + 6)
+	if lo < 0 {
+		lo = 0
+	}
+	for s := lo; s < len(line); s++ {
+		if utf8.RuneCountInString(line[s:]) < minPhraseMatch {
+			break // every later window is shorter still
+		}
+		if !isWordByte(line[s]) || (s > 0 && isWordByte(line[s-1])) {
+			continue // candidate must start at a word boundary
+		}
+		sc := fuzzyPrefixScore([]rune(strings.ToLower(line[s:])), titleLower)
+		if sc > score {
+			score, n = sc, len(line)-s
+		}
+	}
+	return n, score
+}
+
+// fuzzyPrefixScore scores how closely cand matches the beginning of title: it is
+// 1 minus the edit distance from cand to the nearest prefix of title, normalized
+// by cand's length. A clean (possibly partial) prefix scores 1.0; typos lower
+// it. Both inputs must already be lower-cased.
+func fuzzyPrefixScore(cand, title []rune) float64 {
+	if len(cand) == 0 {
+		return 0
+	}
+	d := minPrefixEditDistance(cand, title)
+	return 1 - float64(d)/float64(len(cand))
+}
+
+// minPrefixEditDistance returns the smallest Levenshtein distance between a and
+// any prefix of b (i.e. b is allowed to extend past the match for free).
+func minPrefixEditDistance(a, b []rune) int {
+	prev := make([]int, len(b)+1) // distances for a[:0] == j insertions
+	for j := range prev {
+		prev[j] = j
+	}
+	curr := make([]int, len(b)+1)
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min3(prev[j]+1, curr[j-1]+1, prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+	best := prev[0]
+	for _, d := range prev {
+		if d < best {
+			best = d
+		}
+	}
+	return best
+}
+
+func min3(a, b, c int) int {
+	if b < a {
+		a = b
+	}
+	if c < a {
+		a = c
+	}
+	return a
+}
+
+func isWordByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
 }
 
 // textDocumentCodeAction offers "Create note" on a link whose target does not

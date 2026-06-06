@@ -39,12 +39,12 @@ func (s *Server) textDocumentCompletion(
 		return nil, nil // not inside a link target
 	}
 
-	editRange, typed := referenceEdit(target, src)
-
-	var displayEdit func(title string) []protocol.TextEdit
-	if s.config.CompletionInsertDisplay {
-		displayEdit = s.displayBodyEditor(target, src)
-	}
+	// plan describes the single text edit each item performs. The display body
+	// is folded into this one edit (rather than additionalTextEdits) because
+	// some clients (Helix) apply additional edits against the post-edit buffer
+	// without rebasing offsets, which corrupts edits positioned after the
+	// reference on the same line.
+	plan, typed := s.completionPlan(target, src)
 
 	refKind := protocol.CompletionItemKindReference
 	items := []protocol.CompletionItem{}
@@ -64,17 +64,13 @@ func (s *Server) textDocumentCompletion(
 			exactMatch = true
 		}
 		detail := p
-		item := protocol.CompletionItem{
+		items = append(items, protocol.CompletionItem{
 			Label:      title,
 			Kind:       &refKind,
 			Detail:     &detail,
 			FilterText: &title,
-			TextEdit:   protocol.TextEdit{Range: editRange, NewText: resolver.Reference(p)},
-		}
-		if displayEdit != nil {
-			item.AdditionalTextEdits = displayEdit(title)
-		}
-		items = append(items, item)
+			TextEdit:   plan.edit(resolver.Reference(p), resolver.Display(p, meta)),
+		})
 		if count++; count >= 200 {
 			break
 		}
@@ -86,13 +82,13 @@ func (s *Server) textDocumentCompletion(
 			createKind := protocol.CompletionItemKindFile
 			detail := "create " + newNote.CachePath
 			sortLast := "￿" // keep the create item below real matches
-			item := protocol.CompletionItem{
+			items = append(items, protocol.CompletionItem{
 				Label:      "Create note: " + t,
 				Kind:       &createKind,
 				Detail:     &detail,
 				FilterText: &typed,
 				SortText:   &sortLast,
-				TextEdit:   protocol.TextEdit{Range: editRange, NewText: ref},
+				TextEdit:   plan.edit(ref, t),
 				// Eager creation on clients that run completion commands (e.g.
 				// Neovim). Helix ignores this; the file is created lazily on
 				// navigation or via the code action instead.
@@ -101,11 +97,7 @@ func (s *Server) textDocumentCompletion(
 					Command:   "createNote",
 					Arguments: []any{newNote.CachePath, t},
 				},
-			}
-			if displayEdit != nil {
-				item.AdditionalTextEdits = displayEdit(t)
-			}
-			items = append(items, item)
+			})
 		}
 	}
 
@@ -179,14 +171,40 @@ func targetAt(targets []*sitter.Node, cursorIdx int) *sitter.Node {
 	return nil
 }
 
-// referenceEdit computes the document range covering the reference substring of
-// a target node (the part select_regex extracts) and the text currently there.
-func referenceEdit(target *sitter.Node, src string) (protocol.Range, string) {
+// bodyPlan describes how each completion item rewrites the link in a single
+// text edit. refRange/refEnd cover just the reference substring; when fill is
+// set, fillRange additionally extends through the display body, with middle
+// being the verbatim text (e.g. `")` ) between the reference and the body so it
+// can be reproduced, and bracket indicating whether the body must be wrapped in
+// new `[...]` (no body present) or inserted into an existing empty one.
+type bodyPlan struct {
+	refRange  protocol.Range
+	fill      bool
+	fillRange protocol.Range
+	middle    string
+	bracket   bool
+}
+
+// edit builds the text edit for an item given its reference and display text.
+func (p bodyPlan) edit(ref, display string) protocol.TextEdit {
+	if !p.fill || display == "" {
+		return protocol.TextEdit{Range: p.refRange, NewText: ref}
+	}
+	body := display
+	if p.bracket {
+		body = "[" + display + "]"
+	}
+	return protocol.TextEdit{Range: p.fillRange, NewText: ref + p.middle + body}
+}
+
+// completionPlan computes the single-edit plan for the link target under the
+// cursor and returns the reference text currently typed.
+func (s *Server) completionPlan(target *sitter.Node, src string) (bodyPlan, string) {
 	content := target.Content([]byte(src))
 	rs, re, ok := resolver.SelectReferenceRange(content)
 	if !ok {
 		// Partial/unterminated string: replace everything after the opening
-		// delimiter up to the cursor's node end.
+		// delimiter, and do not attempt to fill a body.
 		rs = 1
 		if rs > len(content) {
 			rs = len(content)
@@ -195,49 +213,48 @@ func referenceEdit(target *sitter.Node, src string) (protocol.Range, string) {
 	}
 	row := target.StartPoint().Row
 	col := target.StartPoint().Column
-	start := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: row, Column: col + uint32(rs)}, src)
-	end := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: row, Column: col + uint32(re)}, src)
+	refStart := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: row, Column: col + uint32(rs)}, src)
+	refEnd := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: row, Column: col + uint32(re)}, src)
 	typed := ""
 	if rs <= re && re <= len(content) {
 		typed = content[rs:re]
 	}
-	return protocol.Range{Start: start, End: end}, typed
-}
+	plan := bodyPlan{refRange: protocol.Range{Start: refStart, End: refEnd}}
 
-// displayBodyEditor returns a function producing the additionalTextEdits that
-// fill a link's display body with a title. It returns nil when there is nothing
-// to do (an existing non-empty body is never overwritten).
-func (s *Server) displayBodyEditor(target *sitter.Node, src string) func(string) []protocol.TextEdit {
+	if !ok || !s.config.CompletionInsertDisplay {
+		return plan, typed
+	}
 	linkCall := enclosingCall(target)
 	if linkCall == nil {
-		return nil
+		return plan, typed
 	}
+
+	refEndByte := int(target.StartByte()) + re
+	var pointByte int
+	var point sitter.Point
 	if body := bodyOf(linkCall); body != nil {
 		open := body.Child(0)
 		closeN := body.Child(int(body.ChildCount()) - 1)
-		if open == nil || closeN == nil {
-			return nil
+		if open == nil || closeN == nil || open.EndByte() != closeN.StartByte() {
+			return plan, typed // missing brackets or an existing non-empty body
 		}
-		innerStart := sitteradapter.TSPointToLSPPosition(open.EndPoint(), src)
-		innerEnd := sitteradapter.TSPointToLSPPosition(closeN.StartPoint(), src)
-		if innerStart != innerEnd {
-			return nil // body already has content
-		}
-		return func(title string) []protocol.TextEdit {
-			return []protocol.TextEdit{{
-				Range:   protocol.Range{Start: innerStart, End: innerEnd},
-				NewText: title,
-			}}
-		}
+		pointByte, point = int(open.EndByte()), open.EndPoint()
+		plan.bracket = false
+	} else {
+		pointByte, point = int(linkCall.EndByte()), linkCall.EndPoint()
+		plan.bracket = true
 	}
-	// No body present: insert one right after the link call.
-	at := sitteradapter.TSPointToLSPPosition(linkCall.EndPoint(), src)
-	return func(title string) []protocol.TextEdit {
-		return []protocol.TextEdit{{
-			Range:   protocol.Range{Start: at, End: at},
-			NewText: "[" + title + "]",
-		}}
+	if pointByte < refEndByte || pointByte > len(src) {
+		return plan, typed
 	}
+	bodyPos := sitteradapter.TSPointToLSPPosition(point, src)
+	if bodyPos.Line != refStart.Line {
+		return plan, typed // body on another line; keep it simple
+	}
+	plan.fill = true
+	plan.fillRange = protocol.Range{Start: refStart, End: bodyPos}
+	plan.middle = src[refEndByte:pointByte]
+	return plan, typed
 }
 
 // linkBodyText returns the text of a link's display body, if present.

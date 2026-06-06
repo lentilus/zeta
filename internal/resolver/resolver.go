@@ -112,6 +112,29 @@ func Reference(relativePath string, soureFormat string) string {
 	return relativePath
 }
 
+// Display returns the human-facing text to insert into a link's display body.
+// Unlike Title it omits classifier captures (e.g. a taxon label), so a rendered
+// link reads "Typst" rather than "<Tool> Typst". It falls back to Title when no
+// display substitutions are present.
+func Display(path string, metadata map[string]string) string {
+	if len(metadata) == 0 || len(displaySubstitutions) == 0 {
+		return Title(path, metadata)
+	}
+	var args []any
+	for _, s := range displaySubstitutions {
+		if v, ok := metadata[s]; ok {
+			args = append(args, v)
+		} else {
+			args = append(args, "")
+		}
+	}
+	display := strings.TrimSpace(fmt.Sprintf(displayTemplate, args...))
+	if display == "" {
+		return Title(path, metadata)
+	}
+	return display
+}
+
 // DefinitionNode returns the captured node that best represents a note's
 // "definition": the earliest-positioned capture among the configured title
 // substitutions (typically the heading/title). It returns nil if the document

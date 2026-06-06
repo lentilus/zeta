@@ -109,6 +109,13 @@ defaults = {
   -- Set to false if your links/query do not use a display body.
   completion_insert_display = true,
 
+  -- The text inserted into the display body is built separately from the
+  -- title, so classifiers used only to disambiguate notes in the picker
+  -- (e.g. a <Tool>/<Theorem> taxon) are kept out of the rendered link.
+  -- Defaults below insert just the title capture.
+  display_substitutions = {"title"},
+  display_template = "%s",
+
   -- How the filename is generated when you create a note from a link:
   --   "random"    -> opaque short id, e.g. a1b2c3.typ (default)
   --   "timestamp" -> e.g. 20260606T153012.typ

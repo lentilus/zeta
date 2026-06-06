@@ -13,6 +13,13 @@ type Config struct {
 	Markdown parser.Format `json:"markdown"`
 	Extensions map[string]string `json:"extensions"`
 
+	// DisplayTemplate / DisplaySubstitutions build the text inserted into a
+	// link's display body on completion. This is kept separate from the title
+	// so classifiers (e.g. a `<Tool>` taxon used to disambiguate notes in the
+	// picker) can be dropped from the rendered link text.
+	DisplayTemplate      string   `json:"display_template"`
+	DisplaySubstitutions []string `json:"display_substitutions"`
+
 	// CompletionInsertDisplay controls whether accepting a link completion also
 	// fills the link's display body (e.g. `#link("id")[Title]`) when it is empty
 	// or absent. Existing non-empty bodies are never overwritten.

@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"zeta/internal/cache"
@@ -15,6 +16,7 @@ import (
 )
 
 const demoQuery = `
+	(code (call item: (ident) @link (#eq? @link "link") (group (string) @target )))
 	(code (call item: (call item: (ident) @link (#eq? @link "link") (group (string) @target ))))
 	(heading (text) @title)
 	(heading (label) @taxon)
@@ -22,7 +24,7 @@ const demoQuery = `
 
 func newTestServer(t *testing.T, root string) *Server {
 	t.Helper()
-	if err := resolver.Configure(root, `^"(.*)"$`, []string{".typ"}, ".typ", "%s %s", []string{"taxon", "title"}); err != nil {
+	if err := resolver.Configure(root, `^"(.*)"$`, []string{".typ"}, ".typ", "%s %s", []string{"taxon", "title"}, "%s", []string{"title"}); err != nil {
 		t.Fatalf("configure: %v", err)
 	}
 	return &Server{
@@ -33,10 +35,20 @@ func newTestServer(t *testing.T, root string) *Server {
 			Query:                   demoQuery,
 			DefaultExtension:        ".typ",
 			CompletionInsertDisplay: true,
+			DisplayTemplate:         "%s",
+			DisplaySubstitutions:    []string{"title"},
 			NewNoteIDScheme:         "random",
 			NewNoteTemplate:         "= %s\n",
 		},
 	}
+}
+
+// applyEdit applies a single completion text edit to src (edits are single-line
+// and self-contained now, so this mirrors how a client applies them).
+func applyEdit(src string, te protocol.TextEdit) string {
+	s := te.Range.Start.IndexIn(src)
+	e := te.Range.End.IndexIn(src)
+	return src[:s] + te.NewText + src[e:]
 }
 
 func openDoc(t *testing.T, s *Server, root, name, src string) string {
@@ -68,43 +80,51 @@ func complete(t *testing.T, s *Server, uri string, line, char uint32) []protocol
 	return res.(protocol.CompletionList).Items
 }
 
-func TestCompletionExistingNoteInsertsReferenceAndDisplay(t *testing.T) {
-	root := t.TempDir()
-	s := newTestServer(t, root)
-	// Seed an existing, non-placeholder note.
-	if err := s.cache.EditNote("axiom.typ", nil, map[string]string{"title": "Axiom of Choice"}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-
-	uri := openDoc(t, s, root, "source.typ", "#link(\"\")[]\n")
-	items := complete(t, s, uri, 0, 7) // cursor between the quotes
-
-	var axiom *protocol.CompletionItem
+func itemByLabel(items []protocol.CompletionItem, label string) *protocol.CompletionItem {
 	for i := range items {
-		if items[i].Label == "Axiom of Choice" {
-			axiom = &items[i]
+		if items[i].Label == label {
+			return &items[i]
 		}
 	}
-	if axiom == nil {
-		t.Fatalf("expected an 'Axiom of Choice' completion, got %d items", len(items))
-	}
+	return nil
+}
 
-	edit := axiom.TextEdit.(protocol.TextEdit)
-	if edit.NewText != "axiom" {
-		t.Errorf("target edit = %q, want %q", edit.NewText, "axiom")
+// TestCompletionFoldsBodyIntoSingleEdit reproduces the reported corruption:
+// completing a bare `#link("typ")` must yield `#link("typst")[Typst]`, with the
+// body after the paren (not inside the URI) and the <Tool> taxon dropped.
+func TestCompletionFoldsBodyIntoSingleEdit(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		char uint32
+		want string
+	}{
+		{"bare link", "#link(\"typ\")\n", 10, "#link(\"typst\")[Typst]\n"},
+		{"empty body", "#link(\"typ\")[]\n", 10, "#link(\"typst\")[Typst]\n"},
+		{"empty target", "#link(\"\")[]\n", 7, "#link(\"typst\")[Typst]\n"},
 	}
-	if edit.Range.Start != (protocol.Position{Line: 0, Character: 7}) {
-		t.Errorf("target edit start = %+v, want {0,7}", edit.Range.Start)
-	}
-	if len(axiom.AdditionalTextEdits) != 1 {
-		t.Fatalf("expected 1 display edit, got %d", len(axiom.AdditionalTextEdits))
-	}
-	disp := axiom.AdditionalTextEdits[0]
-	if disp.NewText != "Axiom of Choice" {
-		t.Errorf("display edit = %q, want %q", disp.NewText, "Axiom of Choice")
-	}
-	if disp.Range.Start != (protocol.Position{Line: 0, Character: 10}) {
-		t.Errorf("display edit start = %+v, want {0,10}", disp.Range.Start)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			s := newTestServer(t, root)
+			if err := s.cache.EditNote("typst.typ", nil, map[string]string{"title": "Typst", "taxon": "<Tool>"}); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			uri := openDoc(t, s, root, "source.typ", tc.src)
+			items := complete(t, s, uri, 0, tc.char)
+
+			it := itemByLabel(items, "<Tool> Typst") // label keeps the taxon for the picker
+			if it == nil {
+				t.Fatalf("expected a '<Tool> Typst' completion, got %d items", len(items))
+			}
+			if len(it.AdditionalTextEdits) != 0 {
+				t.Errorf("expected no additionalTextEdits, got %d", len(it.AdditionalTextEdits))
+			}
+			got := applyEdit(tc.src, it.TextEdit.(protocol.TextEdit))
+			if got != tc.want {
+				t.Errorf("applied = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -112,7 +132,8 @@ func TestCompletionOffersCreateForUnknownConcept(t *testing.T) {
 	root := t.TempDir()
 	s := newTestServer(t, root)
 
-	uri := openDoc(t, s, root, "source.typ", "#link(\"quantum\")[]\n")
+	src := "#link(\"quantum\")[]\n"
+	uri := openDoc(t, s, root, "source.typ", src)
 	items := complete(t, s, uri, 0, 8) // inside "quantum"
 
 	var create *protocol.CompletionItem
@@ -127,9 +148,10 @@ func TestCompletionOffersCreateForUnknownConcept(t *testing.T) {
 	if len(create.Command.Arguments) != 2 || create.Command.Arguments[1] != "quantum" {
 		t.Errorf("create command args = %v, want [<path> quantum]", create.Command.Arguments)
 	}
-	// Display fill uses the typed concept.
-	if len(create.AdditionalTextEdits) != 1 || create.AdditionalTextEdits[0].NewText != "quantum" {
-		t.Errorf("create display edit = %v, want fill 'quantum'", create.AdditionalTextEdits)
+	// The single edit inserts a fresh id and fills the body with the concept.
+	got := applyEdit(src, create.TextEdit.(protocol.TextEdit))
+	if !strings.HasSuffix(got, "[quantum]\n") || !strings.HasPrefix(got, "#link(\"") {
+		t.Errorf("applied create = %q, want #link(\"<id>\")[quantum]", got)
 	}
 }
 

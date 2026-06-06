@@ -168,21 +168,25 @@ func (s *Server) proseLinkCompletions(self string, src string, pos protocol.Posi
 			continue
 		}
 		meta, _ := s.cache.GetMetaData(p)
-		title := resolver.Title(p, meta)
-		n, score := bestLinkWindow(line, title)
+		// Match against the display name (the concept you actually write in
+		// prose, e.g. "Typst"), not the full title which may be prefixed by a
+		// classifier such as a "<Tool>" taxon.
+		display := resolver.Display(p, meta)
+		n, score := bestLinkWindow(line, display)
 		if n == 0 || score < s.config.LinkSuggestThreshold {
 			continue
 		}
 		startCol := uint32(len(line) - n) // byte column of the match within the line
 		start := sitteradapter.TSPointToLSPPosition(sitter.Point{Row: pos.Line, Column: startCol}, src)
 
-		newText, isSnippet := s.linkInsert(resolver.Reference(p), resolver.Display(p, meta))
+		newText, isSnippet := s.linkInsert(resolver.Reference(p), display)
 		detail := "link " + p
+		title := resolver.Title(p, meta)
 		item := protocol.CompletionItem{
 			Label:      title,
 			Kind:       &refKind,
 			Detail:     &detail,
-			FilterText: &title,
+			FilterText: &display,
 			TextEdit:   protocol.TextEdit{Range: protocol.Range{Start: start, End: pos}, NewText: newText},
 		}
 		if isSnippet {

@@ -207,6 +207,29 @@ func TestProseLinkSuggestion(t *testing.T) {
 	}
 }
 
+// TestProseMatchesDisplayNotTaxonTitle reproduces the real-world case where the
+// title is taxon-prefixed ("<Tool> Typst"): typing "typst" must still match,
+// because matching is against the display name ("Typst").
+func TestProseMatchesDisplayNotTaxonTitle(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	if err := s.cache.EditNote("typst.typ", nil, map[string]string{"title": "Typst", "taxon": "<Tool>"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "I prefer typst"
+	uri := openDoc(t, s, root, "source.typ", src)
+	items := complete(t, s, uri, 0, uint32(len(src)))
+
+	it := itemByLabel(items, "<Tool> Typst") // label keeps the taxon for context
+	if it == nil {
+		t.Fatalf("expected a 'Typst' suggestion when typing 'typst', got %d items", len(items))
+	}
+	got := applyEdit(src, it.TextEdit.(protocol.TextEdit))
+	if want := "I prefer #link(\"typst\")[Typst]"; got != want {
+		t.Errorf("applied = %q, want %q", got, want)
+	}
+}
+
 // TestProseFuzzyMatchToleratesTypo ensures a phrase with a typo still matches a
 // title closely enough to be suggested.
 func TestProseFuzzyMatchToleratesTypo(t *testing.T) {

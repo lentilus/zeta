@@ -27,6 +27,11 @@ type Server struct {
 	// `window/showDocument` capability during initialize. It gates the
 	// optional graph feature, which has no spec-compliant fallback.
 	supportsShowDocument bool
+
+	// supportsSnippets records whether the client supports snippet completions
+	// (tab stops / placeholders). When set, link completions use a `${1:…}`
+	// placeholder so the inserted display text is selected after acceptance.
+	supportsSnippets bool
 }
 
 func NewServer(version string) (*server.Server, error) {

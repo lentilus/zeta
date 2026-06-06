@@ -107,6 +107,8 @@ defaults = {
   -- When true, accepting a completion also fills an empty/absent display
   -- body, e.g. #link("d654bf")[Axiom of Choice]. Existing bodies are kept.
   -- Set to false if your links/query do not use a display body.
+  -- On clients that support snippets the inserted body is selected so you
+  -- can immediately keep or overwrite it.
   completion_insert_display = true,
 
   -- The text inserted into the display body is built separately from the

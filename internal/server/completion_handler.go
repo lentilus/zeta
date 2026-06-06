@@ -47,6 +47,7 @@ func (s *Server) textDocumentCompletion(
 	plan, typed := s.completionPlan(target, src)
 
 	refKind := protocol.CompletionItemKindReference
+	snippetFormat := protocol.InsertTextFormatSnippet
 	items := []protocol.CompletionItem{}
 	exactMatch := false
 
@@ -64,13 +65,18 @@ func (s *Server) textDocumentCompletion(
 			exactMatch = true
 		}
 		detail := p
-		items = append(items, protocol.CompletionItem{
+		edit, isSnippet := plan.edit(resolver.Reference(p), resolver.Display(p, meta))
+		item := protocol.CompletionItem{
 			Label:      title,
 			Kind:       &refKind,
 			Detail:     &detail,
 			FilterText: &title,
-			TextEdit:   plan.edit(resolver.Reference(p), resolver.Display(p, meta)),
-		})
+			TextEdit:   edit,
+		}
+		if isSnippet {
+			item.InsertTextFormat = &snippetFormat
+		}
+		items = append(items, item)
 		if count++; count >= 200 {
 			break
 		}
@@ -82,13 +88,14 @@ func (s *Server) textDocumentCompletion(
 			createKind := protocol.CompletionItemKindFile
 			detail := "create " + newNote.CachePath
 			sortLast := "￿" // keep the create item below real matches
-			items = append(items, protocol.CompletionItem{
+			edit, isSnippet := plan.edit(ref, t)
+			item := protocol.CompletionItem{
 				Label:      "Create note: " + t,
 				Kind:       &createKind,
 				Detail:     &detail,
 				FilterText: &typed,
 				SortText:   &sortLast,
-				TextEdit:   plan.edit(ref, t),
+				TextEdit:   edit,
 				// Eager creation on clients that run completion commands (e.g.
 				// Neovim). Helix ignores this; the file is created lazily on
 				// navigation or via the code action instead.
@@ -97,7 +104,11 @@ func (s *Server) textDocumentCompletion(
 					Command:   "createNote",
 					Arguments: []any{newNote.CachePath, t},
 				},
-			})
+			}
+			if isSnippet {
+				item.InsertTextFormat = &snippetFormat
+			}
+			items = append(items, item)
 		}
 	}
 
@@ -183,18 +194,39 @@ type bodyPlan struct {
 	fillRange protocol.Range
 	middle    string
 	bracket   bool
+	snippet   bool // client supports snippet placeholders
 }
 
 // edit builds the text edit for an item given its reference and display text.
-func (p bodyPlan) edit(ref, display string) protocol.TextEdit {
+// The second return value reports whether the edit is a snippet (so the caller
+// can set InsertTextFormat). When the client supports snippets the display body
+// is wrapped in a `${1:…}` tab stop, leaving it selected after acceptance.
+func (p bodyPlan) edit(ref, display string) (protocol.TextEdit, bool) {
 	if !p.fill || display == "" {
-		return protocol.TextEdit{Range: p.refRange, NewText: ref}
+		return protocol.TextEdit{Range: p.refRange, NewText: ref}, false
+	}
+	if p.snippet {
+		body := "${1:" + snippetEscape(display) + "}"
+		if p.bracket {
+			body = "[" + body + "]"
+		}
+		newText := snippetEscape(ref) + snippetEscape(p.middle) + body
+		return protocol.TextEdit{Range: p.fillRange, NewText: newText}, true
 	}
 	body := display
 	if p.bracket {
 		body = "[" + display + "]"
 	}
-	return protocol.TextEdit{Range: p.fillRange, NewText: ref + p.middle + body}
+	return protocol.TextEdit{Range: p.fillRange, NewText: ref + p.middle + body}, false
+}
+
+// snippetEscape escapes the characters that are special in LSP snippet syntax
+// so literal text is inserted verbatim.
+func snippetEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `$`, `\$`)
+	s = strings.ReplaceAll(s, `}`, `\}`)
+	return s
 }
 
 // completionPlan computes the single-edit plan for the link target under the
@@ -219,7 +251,10 @@ func (s *Server) completionPlan(target *sitter.Node, src string) (bodyPlan, stri
 	if rs <= re && re <= len(content) {
 		typed = content[rs:re]
 	}
-	plan := bodyPlan{refRange: protocol.Range{Start: refStart, End: refEnd}}
+	plan := bodyPlan{
+		refRange: protocol.Range{Start: refStart, End: refEnd},
+		snippet:  s.supportsSnippets,
+	}
 
 	if !ok || !s.config.CompletionInsertDisplay {
 		return plan, typed

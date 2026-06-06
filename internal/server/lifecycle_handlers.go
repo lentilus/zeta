@@ -40,6 +40,11 @@ func (s *Server) initialize(
 	if w := params.Capabilities.Window; w != nil && w.ShowDocument != nil {
 		s.supportsShowDocument = w.ShowDocument.Support
 	}
+	if td := params.Capabilities.TextDocument; td != nil && td.Completion != nil {
+		if ci := td.Completion.CompletionItem; ci != nil && ci.SnippetSupport != nil {
+			s.supportsSnippets = *ci.SnippetSupport
+		}
+	}
 
 	// Determine the workspace root. `rootUri` is deprecated and may be null
 	// (per the LSP spec), so fall back to the first workspace folder and

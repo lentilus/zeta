@@ -128,6 +128,33 @@ func TestCompletionFoldsBodyIntoSingleEdit(t *testing.T) {
 	}
 }
 
+// TestCompletionSnippetSelectsBody checks that, when the client supports
+// snippets, the display body is wrapped in a ${1:…} placeholder so it gets
+// selected after acceptance.
+func TestCompletionSnippetSelectsBody(t *testing.T) {
+	root := t.TempDir()
+	s := newTestServer(t, root)
+	s.supportsSnippets = true
+	if err := s.cache.EditNote("typst.typ", nil, map[string]string{"title": "Typst", "taxon": "<Tool>"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	src := "#link(\"typ\")\n"
+	uri := openDoc(t, s, root, "source.typ", src)
+	items := complete(t, s, uri, 0, 10)
+
+	it := itemByLabel(items, "<Tool> Typst")
+	if it == nil {
+		t.Fatalf("expected a '<Tool> Typst' completion, got %d items", len(items))
+	}
+	if it.InsertTextFormat == nil || *it.InsertTextFormat != protocol.InsertTextFormatSnippet {
+		t.Fatalf("expected snippet insert format, got %v", it.InsertTextFormat)
+	}
+	edit := it.TextEdit.(protocol.TextEdit)
+	if want := "typst\")[${1:Typst}]"; edit.NewText != want {
+		t.Errorf("snippet NewText = %q, want %q", edit.NewText, want)
+	}
+}
+
 func TestCompletionOffersCreateForUnknownConcept(t *testing.T) {
 	root := t.TempDir()
 	s := newTestServer(t, root)

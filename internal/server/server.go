@@ -15,10 +15,11 @@ type Server struct {
 	manager   *manager.DocumentManager
 	graphAddr string
 	config    config.Config
+	version   string
 }
 
-func NewServer() (*server.Server, error) {
-	ls := &Server{}
+func NewServer(version string) (*server.Server, error) {
+	ls := &Server{version: version}
 	ls.handler = &protocol.Handler{
 		Initialize:              ls.initialize,
 		Initialized:             ls.initialized,

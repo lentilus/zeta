@@ -56,9 +56,9 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
   callback = function()
     vim.lsp.start({
       name = "zeta",
-      cmd  = { "/tmp/zeta-testing/zeta", "--logfile=/tmp/zeta.log"},
+      cmd  = { "zeta" },
       filetypes = { "typst" },
-      root_dir  = "/tmp/zeta-demo-notes",
+      root_dir  = vim.fn.getcwd(),
       capabilities = vim.lsp.protocol.make_client_capabilities(),
       single_file_support = true,
       init_options = init_options,

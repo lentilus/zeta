@@ -146,6 +146,10 @@ func (s *Server) initialize(
 
 	return protocol.InitializeResult{
 		Capabilities: capabilities,
+		ServerInfo: &protocol.InitializeResultServerInfo{
+			Name:    "zeta",
+			Version: &s.version,
+		},
 	}, nil
 }
 

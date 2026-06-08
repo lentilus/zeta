@@ -9,43 +9,62 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-latest
+            nix-system: x86_64-linux
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            nix-system: aarch64-linux
+
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixpkgs-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # - name: Set up QEMU for ARM64 emulation
-      #   uses: docker/setup-qemu-action@v3
-      #   with:
-      #     platforms: linux/arm64
+      - name: Build binary
+        run: nix build .#packages.${{ matrix.nix-system }}.zeta
 
-      - name: Build Linux x86_64 binary
-        run: nix build .#packages.x86_64-linux.zeta
-
-      # - name: Build Linux aarch64 binary
-      #   run: nix build .#packages.aarch64-linux.zeta
-
-      - name: Prepare binaries
+      - name: Stage artifact
         run: |
-          mkdir dist
-          cp result/bin/zeta dist/zeta-linux-amd64
-          # cp result-2/bin/zeta dist/zeta-linux-arm64
-          chmod +x dist/* || true
+          mkdir -p dist
+          cp result/bin/zeta dist/zeta-linux-${{ matrix.arch }}
+          chmod +x dist/zeta-linux-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: zeta-linux-${{ matrix.arch }}
+          path: dist/zeta-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/zeta-linux-amd64
-            # dist/zeta-linux-arm64
+            dist/zeta-linux-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

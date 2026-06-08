@@ -4,7 +4,7 @@ Zeta is a language server that I created to navigate my mathematical notes more 
 
 The language server detects *metadata* and *links* to other notes via configurable `treesitter-queries`.a
 
-Let's look at an example!`.a
+Let's look at an example!a
 
 :e c5a546.typ
 i= Every Vectorspace has a Basis <Theorem>
@@ -34,8 +34,6 @@ Tip: This pairs very nicely with Telescope's `Telescope lsp_workspace_symbols` c
 
 :lua vim.lsp.buf.workspace_symbol()
 
-
-
 :cclose
 Go
 Finally there is the graph view. It is accessed via a `worskpace command`.
@@ -43,5 +41,3 @@ The graph updates in real-time as you type.a
 :ZetaGraph
 o#link("")[]3hiI am typing this reference as we are viewing the graph
 oI will now show you what the graph may look like when you have more notes.
-
-

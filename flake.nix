@@ -3,133 +3,159 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, ... }@inputs:
-  let
-    systems = [ "x86_64-linux" "aarch64-linux" ];
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+    ...
+  }:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
+        pkgs = nixpkgs.legacyPackages.${system};
 
-    # overlay dependencies
-    overlay = final: prev: {
-      force-graph = prev.fetchurl {
-        url = "https://cdn.jsdelivr.net/npm/force-graph@1.49.5/dist/force-graph.min.js";
-        sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
-      };
-      tree-sitter-typst = prev.fetchFromGitHub {
-        owner = "uben0";
-        repo = "tree-sitter-typst";
-        rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
-        sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
-      };
-    };
+        force-graph = pkgs.fetchurl {
+          url = "https://cdn.jsdelivr.net/npm/force-graph@1.49.5/dist/force-graph.min.js";
+          sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
+        };
 
-    # Helper to import nixpkgs with our overlay
-    forAllSystems = f:
-      nixpkgs.lib.genAttrs systems (system:
-        let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ overlay ];
+        # For reasons that are beyond me, there is a run-time error originating
+        # from the grammar if we use the grammar from nixpkgs. In the long term
+        # we should compile the grammar seperately and not leave CGO to mess
+        # with it.
+        tree-sitter-typst-src = pkgs.fetchFromGitHub {
+          owner = "uben0";
+          repo = "tree-sitter-typst";
+          rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
+          sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
+        };
+      in {
+        packages = rec {
+          zeta = pkgs.buildGoModule rec {
+            pname = "zeta";
+            version = "0.3.7";
+
+            src = pkgs.lib.cleanSourceWith {
+              src = ./.;
+              filter = path: _type: let
+                base = baseNameOf path;
+              in
+                !(builtins.elem base ["result" "_example"]);
+            };
+
+            nativeBuildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+              pkgs.gcc
+            ];
+
+            buildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+              pkgs.glibc.static
+            ];
+
+            env.CGO_ENABLED = "1";
+
+            ldflags =
+              [
+                "-s"
+                "-w"
+                "-X main.Version=v${version}"
+              ]
+              ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+                "-linkmode external"
+                "-extldflags -static"
+              ];
+
+            vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
+            doCheck = false;
+            enableParallelBuilding = true;
+
+            postPatch = ''
+              mkdir -p external/_vendor
+              rm -rf .gitignore
+              cp -r ${tree-sitter-typst-src} external/_vendor/tree-sitter-typst
+              cp -r ${force-graph} external/_vendor/force-graph.js
+            '';
           };
-        in f { inherit pkgs system; }
-      );
-  in {
-    packages = forAllSystems ({ pkgs, system }: rec {
-      zeta = pkgs.buildGoModule rec {
-        pname   = "zeta";
-        version = "0.3.5";
-        src     = ./.;
 
-        buildInputs = [
-          pkgs.go
-          pkgs.gcc
-          pkgs.glibc.static
-          pkgs.glibcLocales
-        ];
+          default = zeta;
+        };
 
-        env.CGO_ENABLED = "1";
+        apps = {
+          default = {
+            type = "app";
+            program = "${self.packages.${system}.zeta}/bin/zeta";
+          };
+        };
 
-        ldflags = [
-          "-s" "-w"
-          "-linkmode external"
-          "-extldflags -static"
-          "-X main.Version=v${version}"
-        ];
+        formatter = pkgs.alejandra;
 
-        vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
-        doCheck    = false;
+        devShells = let
+          zetaPkg = self.packages.${system}.zeta;
 
-        patchPhase = ''
-          mkdir -p external/_vendor
-          rm -rf .gitignore
-          cp -r ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-          cp -r ${pkgs.force-graph}   external/_vendor/force-graph.js
-        '';
-      };
+          mkTestbed = ''
+            testdir="$(mktemp -d -t zeta-testing.XXXXXX)"
+            notesdir="$(mktemp -d -t zeta-test-notes.XXXXXX)"
+            touch $notesdir/test.typ
+            trap 'rm -rf "$testdir" "$notesdir"' EXIT
+          '';
 
-      default = zeta;
-    });
+          debugCmd = pkgs.writeShellScriptBin "debug" ''
+            ${mkTestbed}
+            go build -o "$testdir/zeta" -gcflags=all=-N . || exit
+            PATH="$testdir:$PATH"
+            exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} "$notesdir/test.typ"
+          '';
 
-devShells = forAllSystems ({ pkgs, system }: let
-      debugCmd = pkgs.writeShellScriptBin "debug" ''
-        rm -rf /tmp/zeta-testing/*
-        mkdir -p /tmp/zeta-test-notes
-        mkdir -p /tmp/zeta-testing
-        go build -o /tmp/zeta-testing/zeta -gcflags=all=-N . || exit
-        PATH="/tmp/zeta-testing:$PATH"
-        exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
-      '';
+          debugReleaseCmd = pkgs.writeShellScriptBin "debugRelease" ''
+            ${mkTestbed}
+            PATH="${zetaPkg}/bin:$PATH"
+            exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} "$notesdir/test.typ"
+          '';
 
-      debugReleaseCmd = pkgs.writeShellScriptBin "debugRelease" ''
-        rm -rf /tmp/zeta-testing/*
-        mkdir -p /tmp/zeta-test-notes
-        mkdir -p /tmp/zeta-testing
-        nix build .#zeta || exit
-        cp result/bin/zeta /tmp/zeta-testing/zeta
-        PATH="/tmp/zeta-testing:$PATH"
-        exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} /tmp/zeta-test-notes/test.typ
-      '';
+          vendorCmd = pkgs.writeShellScriptBin "vendor" ''
+            echo "Populating _vendor directory..."
+            rm -rf external/_vendor
+            mkdir -p external/_vendor
+            cp -r --no-preserve=mode,ownership ${tree-sitter-typst-src} external/_vendor/tree-sitter-typst
+            cp -r --no-preserve=mode,ownership ${force-graph} external/_vendor/force-graph.js
+            echo "_vendor directory is now up to date."
+          '';
 
-      vendorCmd = pkgs.writeShellScriptBin "vendor" ''
-        echo "Populating _vendor directory..."
-        rm -rf external/_vendor
-        mkdir -p external/_vendor
-        cp -r --no-preserve=mode,ownership ${pkgs.tree-sitter-typst} external/_vendor/tree-sitter-typst
-        cp -r --no-preserve=mode,ownership ${pkgs.force-graph} external/_vendor/force-graph.js
-        echo "_vendor directory is now up to date."
-      '';
+          demo = pkgs.writeShellScriptBin "demo" ''
+            set -e
+            root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            workdir="$(mktemp -d -t zeta-demo.XXXXXX)"
+            trap 'rm -rf "$workdir"' EXIT
 
-      demo = pkgs.writeShellScriptBin "demo" ''
-        rm -rf /tmp/zeta-demo-notes
-        mkdir -p /tmp/zeta-demo-notes
-        cd /tmp/zeta-demo-notes
+            go build -C "$root" -o "$workdir/zeta" .
 
-        pv -qL 20 ${./_example/demo.txt} \
-          | script -q -c \
-          "stty rows $(tput lines) cols $(tput cols); \
-          nvim -u ${./_example/demo.lua}" \
-          /dev/null
-      '';
-    in {
-      default = pkgs.mkShell {
-        shellHook = ''
-          echo "== Welcome to zeta dev shell =="
-        '';
-        buildInputs = [
-          pkgs.go
-          pkgs.gopls
-          pkgs.gofumpt
-          pkgs.gotools
-          pkgs.golines
-          pkgs.typst
-          pkgs.tinymist
-          pkgs.pv
-          debugCmd
-          debugReleaseCmd
-          vendorCmd
-          demo
-        ];
-      };
-    });
-  };
+            cd "$workdir"
+            export PATH="$workdir:$PATH"
+            ${pkgs.pv}/bin/pv -qL 20 "$root/_example/demo.txt" \
+              | ${pkgs.expect}/bin/unbuffer -p ${pkgs.neovim}/bin/nvim -u "$root/_example/demo.lua"
+          '';
+        in {
+          default = pkgs.mkShell {
+            shellHook = ''
+              echo "== Welcome to zeta dev shell =="
+            '';
+            packages = [
+              pkgs.go
+              pkgs.gopls
+              pkgs.gofumpt
+              pkgs.gotools
+              pkgs.golines
+              pkgs.typst
+              pkgs.tinymist
+              pkgs.pv
+              debugCmd
+              debugReleaseCmd
+              vendorCmd
+              demo
+            ];
+          };
+        };
+      }
+    );
 }

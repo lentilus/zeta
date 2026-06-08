@@ -35,7 +35,7 @@
         packages = rec {
           zeta = pkgs.buildGoModule rec {
             pname = "zeta";
-            version = "0.3.5";
+            version = "0.3.7";
 
             src = pkgs.lib.cleanSourceWith {
               src = ./.;

@@ -21,7 +21,16 @@
           sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
         };
 
-        tree-sitter-typst-src = pkgs.tree-sitter-grammars.tree-sitter-typst.src;
+        # For reasons that are beyond me, there is a run-time error originating
+        # from the grammar if we use the grammar from nixpkgs. In the long term
+        # we should compile the grammar seperately and not leave CGO to mess
+        # with it.
+        tree-sitter-typst-src = pkgs.fetchFromGitHub {
+          owner = "uben0";
+          repo = "tree-sitter-typst";
+          rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
+          sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
+        };
       in {
         packages = rec {
           zeta = pkgs.buildGoModule rec {

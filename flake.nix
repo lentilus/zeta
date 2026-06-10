@@ -16,21 +16,15 @@
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        force-graph = pkgs.fetchurl {
-          url = "https://cdn.jsdelivr.net/npm/force-graph@1.49.5/dist/force-graph.min.js";
-          sha256 = "sha256-x3jy78zXsY6aQDD1PYHTGfF5qKuPvG8QAB3GyQTSA6E=";
-        };
+        allGrammars = import ./grammars.nix {inherit pkgs;};
 
-        # For reasons that are beyond me, there is a run-time error originating
-        # from the grammar if we use the grammar from nixpkgs. In the long term
-        # we should compile the grammar seperately and not leave CGO to mess
-        # with it.
-        tree-sitter-typst-src = pkgs.fetchFromGitHub {
-          owner = "uben0";
-          repo = "tree-sitter-typst";
-          rev = "46cf4ded12ee974a70bf8457263b67ad7ee0379d";
-          sha256 = "sha256-s/9R3DKA6dix6BkU4mGXaVggE4bnzOyu20T1wuqHQxk=";
-        };
+        mkTestbed = ''
+          testdir="$(mktemp -d -t zeta-testing.XXXXXX)"
+          notesdir="$(mktemp -d -t zeta-test-notes.XXXXXX)"
+          touch $notesdir/test.typ
+          trap 'rm -rf "$testdir" "$notesdir"' EXIT
+        '';
+
       in {
         packages = rec {
           zeta = pkgs.buildGoModule rec {
@@ -67,18 +61,23 @@
               ];
 
             vendorHash = "sha256-6muGhy8MNOC5EkFtoGCQ3QgEMKYsg0Y/aG2HBJsJqnM=";
-            doCheck = false;
+            doCheck = true;
             enableParallelBuilding = true;
-
-            postPatch = ''
-              mkdir -p external/_vendor
-              rm -rf .gitignore
-              cp -r ${tree-sitter-typst-src} external/_vendor/tree-sitter-typst
-              cp -r ${force-graph} external/_vendor/force-graph.js
-            '';
           };
 
           default = zeta;
+
+          vendorGrammars = pkgs.writeShellScriptBin "vendorGrammars" ''
+            echo "Populating grammars directory..."
+            cp -rL --no-preserve=mode,ownership ${allGrammars}/* ./grammars/
+            ls -al ./grammars
+          '';
+
+          debugRelease = pkgs.writeShellScriptBin "debugRelease" ''
+            ${mkTestbed}
+            PATH="${zeta}/bin:$PATH"
+            exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} "$notesdir/test.typ"
+          '';
         };
 
         apps = {
@@ -93,33 +92,11 @@
         devShells = let
           zetaPkg = self.packages.${system}.zeta;
 
-          mkTestbed = ''
-            testdir="$(mktemp -d -t zeta-testing.XXXXXX)"
-            notesdir="$(mktemp -d -t zeta-test-notes.XXXXXX)"
-            touch $notesdir/test.typ
-            trap 'rm -rf "$testdir" "$notesdir"' EXIT
-          '';
-
           debugCmd = pkgs.writeShellScriptBin "debug" ''
             ${mkTestbed}
             go build -o "$testdir/zeta" -gcflags=all=-N . || exit
             PATH="$testdir:$PATH"
             exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} "$notesdir/test.typ"
-          '';
-
-          debugReleaseCmd = pkgs.writeShellScriptBin "debugRelease" ''
-            ${mkTestbed}
-            PATH="${zetaPkg}/bin:$PATH"
-            exec ${pkgs.neovim}/bin/nvim -u ${./_example/init.lua} "$notesdir/test.typ"
-          '';
-
-          vendorCmd = pkgs.writeShellScriptBin "vendor" ''
-            echo "Populating _vendor directory..."
-            rm -rf external/_vendor
-            mkdir -p external/_vendor
-            cp -r --no-preserve=mode,ownership ${tree-sitter-typst-src} external/_vendor/tree-sitter-typst
-            cp -r --no-preserve=mode,ownership ${force-graph} external/_vendor/force-graph.js
-            echo "_vendor directory is now up to date."
           '';
 
           demo = pkgs.writeShellScriptBin "demo" ''
@@ -146,12 +123,7 @@
               pkgs.gofumpt
               pkgs.gotools
               pkgs.golines
-              pkgs.typst
-              pkgs.tinymist
-              pkgs.pv
               debugCmd
-              debugReleaseCmd
-              vendorCmd
               demo
             ];
           };

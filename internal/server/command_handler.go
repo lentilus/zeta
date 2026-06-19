@@ -5,7 +5,6 @@ import (
 	"log"
 	"zeta/internal/cache"
 	"zeta/internal/graph"
-	"zeta/internal/resolver"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -63,7 +62,7 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 
 	// noteToNode now uses note.Metadata directly, rather than fetching from cache
 	noteToNode := func(note cache.NoteEvent) graph.Node {
-		name := resolver.Title(note.Path, note.Metadata)
+		name := note.Metadata["DISPLAY_TITLE"]
 		node := graph.Node{
 			Label:  name,
 			Grayed: note.Placeholder,
@@ -95,7 +94,7 @@ func ProcessEvents(s *Server, events <-chan cache.Event) {
 
 			// Use note.Metadata provided by the UpdateNote event
 			updatedNode := graph.Node{
-				Label:  resolver.Title(ev.Note.Path, ev.Note.Metadata),
+				Label:  ev.Note.Metadata["DISPLAY_TITLE"],
 				Grayed: ev.Note.Placeholder,
 				ID:     id,
 			}
